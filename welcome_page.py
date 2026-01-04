@@ -15,6 +15,8 @@ class WelcomePage(QWidget):
     barcodeScanned = pyqtSignal(str)
     settingsRequested = pyqtSignal()
     safeBalanceEditRequested = pyqtSignal()
+    storeRegistrationRequested = pyqtSignal()
+    lastReceiptPrintRequested = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -226,6 +228,7 @@ class WelcomePage(QWidget):
         
         btn_print = QPushButton("영수증 출력")
         btn_print.setStyleSheet("background: #8A79B6; color: white; border-radius: 20px; font-weight: bold; font-size: 11pt; padding: 7px 20px;")
+        btn_print.clicked.connect(self.lastReceiptPrintRequested.emit)
         h_title_lyt.addStretch()
         h_title_lyt.addWidget(btn_print)
         hist_lyt.addLayout(h_title_lyt)
@@ -322,13 +325,15 @@ class WelcomePage(QWidget):
         btn_l_arr.setStyleSheet("background: white; border: 1px solid #DEE2E6;")
         cat_row.addWidget(btn_l_arr)
         
-        cats = [("일반상품", "#7AB800"), ("소분상품", "#6C757D"), ("신문/상품권", "#6C757D"), ("쓰레기봉투/화장", "#6C757D"), ("점포등록1", "#6C757D"), ("상품관리", "#6C757D")]
+        cats = [("일반상품", "#7AB800"), ("소분상품", "#6C757D"), ("신문/상품권", "#6C757D"), ("쓰레기봉투/화장", "#6C757D"), ("점포등록", "#6C757D"), ("상품관리", "#6C757D")]
         for n, c in cats:
             b = QPushButton(n)
             b.setFixedHeight(50)
             b.setStyleSheet(f"background: white; color: #333; font-weight: bold; border: 1px solid #DEE2E6; border-top: 4px solid {c};")
             if n == "상품관리":
                 b.clicked.connect(self.settingsRequested.emit)
+            elif n == "점포등록":
+                b.clicked.connect(self.storeRegistrationRequested.emit)
             cat_row.addWidget(b, stretch=1)
             
         btn_r_arr = QPushButton(">")

@@ -1,4 +1,4 @@
-import sys
+import sys, random, datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, 
                              QLabel, QLineEdit, QGridLayout, QFrame, QAbstractItemView, QPushButton, QStackedWidget, QInputDialog)
@@ -6,12 +6,14 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 
 import styles
-from ui_components import ActionButton, StatusLabel, SummaryFrame, EditItemDialog, CustomMessageDialog, SafeBalanceEditDialog
+from ui_components import (ActionButton, StatusLabel, SummaryFrame, EditItemDialog, 
+                               CustomMessageDialog, SafeBalanceEditDialog, ReceiptPreviewDialog, StoreRegistrationDialog)
 from product_manager import ProductManager
 from settings_page import SettingsPage
 from payment_ui import CreditCardPaymentDialog, CashPaymentDialog, CashReceiptDialog
 from welcome_page import WelcomePage
 from transaction_manager import TransactionManager
+from receipt_manager import ReceiptManager
 
 class POSMainWindow(QMainWindow):
     def __init__(self):
@@ -22,6 +24,14 @@ class POSMainWindow(QMainWindow):
         # Initialize Product Manager and Transaction Manager
         self.product_manager = ProductManager()
         self.transaction_manager = TransactionManager()
+        self.receipt_manager = ReceiptManager()
+        
+        self.init_ui()
+
+        # Apply Styles
+        self.setStyleSheet(styles.MAIN_WINDOW_STYLE)
+
+    def init_ui(self):
         self.cart = [] # List of {"barcode": str, "qty": int}
         
         # Main Stacked Widget
@@ -33,6 +43,8 @@ class POSMainWindow(QMainWindow):
         self.welcome_page.barcodeScanned.connect(self.switch_to_sales_and_add)
         self.welcome_page.settingsRequested.connect(self.open_settings)
         self.welcome_page.safeBalanceEditRequested.connect(self.handle_safe_balance_edit)
+        self.welcome_page.storeRegistrationRequested.connect(self.handle_store_registration)
+        self.welcome_page.lastReceiptPrintRequested.connect(self.handle_welcome_receipt_print)
         self.central_stack.addWidget(self.welcome_page)
         
         # Load last transaction for welcome page
@@ -45,9 +57,6 @@ class POSMainWindow(QMainWindow):
         
         # Start at Welcome Page
         self.central_stack.setCurrentIndex(0)
-        
-        # Apply Styles
-        self.setStyleSheet(styles.MAIN_WINDOW_STYLE)
 
     def setup_sales_ui(self):
         main_layout = QVBoxLayout(self.sales_widget)
@@ -89,7 +98,7 @@ class POSMainWindow(QMainWindow):
         self.input_barcode.setFocus()
 
     def go_to_home(self):
-        self.clear_all()
+        self.clear_cart()
         # Return to Welcome Page
         self.central_stack.setCurrentIndex(0)
 
@@ -246,7 +255,7 @@ class POSMainWindow(QMainWindow):
         # Split Cancel/Wait
         split_btns = QHBoxLayout()
         btn_cancel = ActionButton("전체취소", styles.BUTTON_RED_STYLE)
-        btn_cancel.clicked.connect(self.clear_all)
+        btn_cancel.clicked.connect(self.clear_cart)
         
         btn_wait = ActionButton("대기", styles.BUTTON_PURPLE_STYLE.replace(styles.PRIMARY_PURPLE, "#78909C")) # Grayish
         split_btns.addWidget(btn_cancel)
@@ -412,7 +421,7 @@ class POSMainWindow(QMainWindow):
         # Ensure it's large if not already
         self.lbl_final_price.setStyleSheet(styles.BIG_PRICE_STYLE)
         
-    def clear_all(self):
+    def clear_cart(self):
         self.cart = []
         self.update_table_view()
         self.update_totals()
@@ -438,6 +447,13 @@ class POSMainWindow(QMainWindow):
             self.update_table_view()
             self.update_totals()
 
+    def generate_tx_barcode(self):
+        # Format: YYMMDDHHMMSS + 4 random digits
+        now = datetime.datetime.now()
+        base = now.strftime("%y%m%d%H%M%S")
+        rand = "".join([str(random.randint(0, 9)) for _ in range(4)])
+        return base + rand
+
     def open_card_payment(self):
         # Calculate total
         total_amt = sum(self.product_manager.get_product(item["barcode"])["price"] * item["qty"] for item in self.cart)
@@ -450,26 +466,39 @@ class POSMainWindow(QMainWindow):
         dialog = CreditCardPaymentDialog(total_amt, self)
         if dialog.exec():
             # Save Transaction
-            items_to_save = []
+            items_data = []
             for item in self.cart:
                 prod = self.product_manager.get_product(item["barcode"])
-                items_to_save.append({
+                items_data.append({
                     "name": prod["name"],
                     "qty": item["qty"],
                     "price": prod["price"]
                 })
+            card_num = dialog.get_card_number()
+            tx_barcode = self.generate_tx_barcode()
+            
             self.transaction_manager.save_transaction(
-                items_to_save, 
-                total_amt, 
-                "Card", 
-                payment_details={"card_number": dialog.get_card_number()}
+                items=items_data,
+                total_amt=total_amt,
+                payment_method="Card",
+                payment_details={"card_number": card_num},
+                tx_barcode=tx_barcode
             )
+            
+            # Show Receipt
+            tx_data = {
+                "items": items_data,
+                "total_amt": total_amt,
+                "payment_method": "Card",
+                "payment_details": {"card_number": card_num},
+                "tx_barcode": tx_barcode
+            }
+            receipt_html = self.receipt_manager.generate_html(tx_data)
+            ReceiptPreviewDialog(receipt_html, self).exec()
+            
+            self.clear_cart()
             self.update_welcome_history()
-
-            # Payment Successful
-            success_msg = CustomMessageDialog("결제 완료", f"{total_amt:,}원 결제가 완료되었습니다.", 'info', self)
-            success_msg.exec()
-            self.clear_all()
+            CustomMessageDialog("결제 완료", f"{total_amt:,}원 결제가 완료되었습니다.", 'info', self).exec()
 
     def open_cash_payment(self):
         # Calculate total
@@ -487,30 +516,46 @@ class POSMainWindow(QMainWindow):
             dlg_receipt = CashReceiptDialog(total_amt, dlg_pay.received_amount, self)
             if dlg_receipt.exec():
                 # Save Transaction
-                items_to_save = []
+                items_data = []
                 for item in self.cart:
                     prod = self.product_manager.get_product(item["barcode"])
-                    items_to_save.append({
+                    items_data.append({
                         "name": prod["name"],
                         "qty": item["qty"],
                         "price": prod["price"]
                     })
-                self.transaction_manager.save_transaction(
-                    items_to_save, 
-                    total_amt, 
-                    "Cash", 
-                    received_amt=dlg_pay.received_amount, 
-                    change_amt=dlg_receipt.change_amount,
-                    payment_details={"receipt_id": dlg_receipt.get_receipt_id()}
-                )
-                self.update_welcome_history()
+                received_amt = dlg_pay.received_amount
+                change_amt = dlg_receipt.change_amount
+                receipt_id = dlg_receipt.get_receipt_id()
+                tx_barcode = self.generate_tx_barcode()
 
-                # Transaction Complete
-                # Check dlg_receipt.issue_receipt if we were saving to DB
+                self.transaction_manager.save_transaction(
+                    items=items_data,
+                    total_amt=total_amt,
+                    payment_method="Cash",
+                    received_amt=received_amt,
+                    change_amt=change_amt,
+                    payment_details={"receipt_id": receipt_id},
+                    tx_barcode=tx_barcode
+                )
                 
-                success_msg = CustomMessageDialog("결제 완료", f"현금 {total_amt:,}원 결제가 완료되었습니다.\n거스름돈: {dlg_receipt.change_amount:,}원", 'info', self)
-                success_msg.exec()
-                self.clear_all()
+                # Show Receipt
+                tx_data = {
+                    "items": items_data,
+                    "total_amt": total_amt,
+                    "payment_method": "Cash",
+                    "received_amt": received_amt,
+                    "change_amt": change_amt,
+                    "payment_details": {"receipt_id": receipt_id},
+                    "tx_barcode": tx_barcode
+                }
+                receipt_html = self.receipt_manager.generate_html(tx_data)
+                ReceiptPreviewDialog(receipt_html, self).exec()
+
+                self.clear_cart()
+                self.update_welcome_history()
+                
+                CustomMessageDialog("결제 완료", f"현금 {total_amt:,}원 결제가 완료되었습니다.\n거스름돈: {change_amt:,}원", 'info', self).exec()
 
     def update_welcome_history(self):
         last_tx = self.transaction_manager.get_last_transaction()
@@ -535,6 +580,36 @@ class POSMainWindow(QMainWindow):
             self.update_welcome_history()
             
             CustomMessageDialog("수정 완료", f"금고 보관 금액이 {amount:,}원으로 수정되었습니다.", 'info', self).exec()
+
+    def handle_store_registration(self):
+        store_info = {
+            "store_name": self.receipt_manager.store_name,
+            "biz_num": self.receipt_manager.biz_num,
+            "address": self.receipt_manager.address,
+            "owner": self.receipt_manager.owner,
+            "tel": self.receipt_manager.tel
+        }
+        
+        dialog = StoreRegistrationDialog(store_info, self)
+        if dialog.exec():
+            new_info = dialog.get_store_info()
+            self.receipt_manager.store_name = new_info["store_name"]
+            self.receipt_manager.biz_num = new_info["biz_num"]
+            self.receipt_manager.address = new_info["address"]
+            self.receipt_manager.owner = new_info["owner"]
+            self.receipt_manager.tel = new_info["tel"]
+            
+            self.receipt_manager.save_store_info()
+            CustomMessageDialog("저장 완료", "점포 정보가 성공적으로 저장되었습니다.", 'info', self).exec()
+
+    def handle_welcome_receipt_print(self):
+        last_tx = self.transaction_manager.get_last_transaction()
+        if not last_tx:
+            CustomMessageDialog("출력 오류", "이전 결제 내역이 없습니다.", 'warning', self).exec()
+            return
+            
+        receipt_html = self.receipt_manager.generate_html(last_tx)
+        ReceiptPreviewDialog(receipt_html, self).exec()
 
     def open_settings(self):
         settings_dialog = SettingsPage(self.product_manager, self)

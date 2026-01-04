@@ -1,7 +1,8 @@
 from PyQt6.QtWidgets import (QPushButton, QLabel, QFrame, QVBoxLayout, QDialog, 
-                             QHBoxLayout, QSpinBox, QGraphicsDropShadowEffect, QLineEdit)
+                             QHBoxLayout, QSpinBox, QGraphicsDropShadowEffect, QLineEdit, QTextBrowser)
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
+from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
 import styles
 
 class ActionButton(QPushButton):
@@ -448,3 +449,246 @@ class SafeBalanceEditDialog(QDialog):
 
     def get_amount(self):
         return self.new_amount
+
+class ReceiptPreviewDialog(QDialog):
+    def __init__(self, html_content, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(450, 700)
+        
+        # Main Container
+        self.container = QFrame(self)
+        self.container.setGeometry(10, 10, 430, 680)
+        self.container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {styles.WHITE};
+                border-radius: 15px;
+                border: 1px solid {styles.BORDER_COLOR};
+            }}
+        """)
+        
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        shadow.setOffset(0, 5)
+        self.container.setGraphicsEffect(shadow)
+        
+        layout = QVBoxLayout(self.container)
+        layout.setContentsMargins(0, 0, 0, 20)
+        
+        # Header
+        header = QFrame()
+        header.setStyleSheet(f"""
+            background-color: {styles.PRIMARY_PURPLE};
+            border-top-left-radius: 15px;
+            border-top-right-radius: 15px;
+        """)
+        header.setFixedHeight(60)
+        header_layout = QHBoxLayout(header)
+        
+        lbl_title = QLabel("기 결제 영수증 확인")
+        lbl_title.setStyleSheet("color: white; font-size: 16pt; font-weight: bold; font-family: 'Malgun Gothic';")
+        header_layout.addWidget(lbl_title, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(header)
+        
+        # Receipt View
+        self.view = QTextBrowser()
+        self.view.setHtml(html_content)
+        self.view.setStyleSheet("border: none; background: white; margin: 10px;")
+        layout.addWidget(self.view)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(15)
+        btn_layout.setContentsMargins(30, 0, 30, 0)
+        
+        btn_print = QPushButton("출력")
+        btn_print.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_print.setFixedHeight(50)
+        btn_print.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {styles.ACCENT_GREEN};
+                color: white;
+                border-radius: 10px;
+                font-size: 14pt;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: {styles.DARK_GREEN}; }}
+        """)
+        btn_print.clicked.connect(self.print_receipt)
+        
+        btn_close = QPushButton("닫기")
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.setFixedHeight(50)
+        btn_close.setStyleSheet("""
+            QPushButton {
+                background-color: #BDBDBD;
+                color: white;
+                border-radius: 10px;
+                font-size: 14pt;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #9E9E9E; }
+        """)
+        btn_close.clicked.connect(self.reject)
+        
+        btn_layout.addWidget(btn_print, stretch=2)
+        btn_layout.addWidget(btn_close, stretch=1)
+        layout.addLayout(btn_layout)
+
+    def print_receipt(self):
+        try:
+            printer = QPrinter(QPrinter.PrinterMode.HighResolution)
+            
+            # Open print dialog for the user to select printer
+            dialog = QPrintDialog(printer, self)
+            if dialog.exec() == QPrintDialog.DialogCode.Accepted:
+                self.view.print(printer)
+                self.accept()
+        except Exception as e:
+            from ui_components import CustomMessageDialog
+            CustomMessageDialog("출력 오류", f"프린터 초기화 중 오류가 발생했습니다.\n{str(e)}", 'warning', self).exec()
+
+class StoreRegistrationDialog(QDialog):
+    def __init__(self, store_info, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(500, 550)
+        
+        self.store_info = store_info
+        
+        # Main Container
+        self.container = QFrame(self)
+        self.container.setGeometry(10, 10, 480, 530)
+        self.container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {styles.WHITE};
+                border-radius: 15px;
+                border: 1px solid {styles.BORDER_COLOR};
+            }}
+        """)
+        
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        shadow.setOffset(0, 5)
+        self.container.setGraphicsEffect(shadow)
+        
+        layout = QVBoxLayout(self.container)
+        layout.setContentsMargins(0, 0, 0, 20)
+        layout.setSpacing(10)
+        
+        # Header
+        header = QFrame()
+        header.setStyleSheet(f"""
+            background-color: {styles.PRIMARY_PURPLE};
+            border-top-left-radius: 15px;
+            border-top-right-radius: 15px;
+        """)
+        header.setFixedHeight(60)
+        header_layout = QHBoxLayout(header)
+        
+        lbl_title = QLabel("점포 정보 등록 / 수정")
+        lbl_title.setStyleSheet("color: white; font-size: 16pt; font-weight: bold; font-family: 'Malgun Gothic';")
+        header_layout.addWidget(lbl_title, alignment=Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(header)
+        
+        # Content
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(30, 10, 30, 10)
+        content_layout.setSpacing(15)
+        
+        def add_input_row(label, value):
+            v_box = QVBoxLayout()
+            v_box.setSpacing(5)
+            lbl = QLabel(label)
+            lbl.setStyleSheet(f"color: #666; font-size: 10pt; font-weight: bold;")
+            v_box.addWidget(lbl)
+            
+            edit = QLineEdit(value)
+            edit.setFixedHeight(40)
+            edit.setStyleSheet(f"""
+                QLineEdit {{
+                    font-size: 11pt;
+                    color: {styles.TEXT_COLOR};
+                    border: 1px solid {styles.BORDER_COLOR};
+                    border-radius: 5px;
+                    padding-left: 10px;
+                    background-color: #F9F9F9;
+                }}
+                QLineEdit:focus {{
+                    border: 2px solid {styles.PRIMARY_PURPLE};
+                    background-color: white;
+                }}
+            """)
+            v_box.addWidget(edit)
+            content_layout.addLayout(v_box)
+            return edit
+
+        self.edit_name = add_input_row("점포명 (Store Name)", store_info.get("store_name", ""))
+        self.edit_biz = add_input_row("사업자등록번호 (Biz Num)", store_info.get("biz_num", ""))
+        self.edit_addr = add_input_row("주소 (Address)", store_info.get("address", ""))
+        self.edit_owner = add_input_row("대표자명 (Owner)", store_info.get("owner", ""))
+        self.edit_tel = add_input_row("전화번호 (Tel)", store_info.get("tel", ""))
+        
+        layout.addLayout(content_layout)
+        layout.addStretch()
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(15)
+        btn_layout.setContentsMargins(30, 0, 30, 0)
+        
+        btn_save = QPushButton("저장")
+        btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_save.setFixedHeight(50)
+        btn_save.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {styles.ACCENT_GREEN};
+                color: white;
+                border-radius: 10px;
+                font-size: 13pt;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: {styles.DARK_GREEN}; }}
+        """)
+        btn_save.clicked.connect(self.process_save)
+        
+        btn_cancel = QPushButton("취소")
+        btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_cancel.setFixedHeight(50)
+        btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #BDBDBD;
+                color: white;
+                border-radius: 10px;
+                font-size: 13pt;
+                font-weight: bold;
+            }
+            QPushButton:hover { background-color: #9E9E9E; }
+        """)
+        btn_cancel.clicked.connect(self.reject)
+        
+        btn_layout.addWidget(btn_save, stretch=2)
+        btn_layout.addWidget(btn_cancel, stretch=1)
+        layout.addLayout(btn_layout)
+
+    def process_save(self):
+        self.new_info = {
+            "store_name": self.edit_name.text().strip(),
+            "biz_num": self.edit_biz.text().strip(),
+            "address": self.edit_addr.text().strip(),
+            "owner": self.edit_owner.text().strip(),
+            "tel": self.edit_tel.text().strip()
+        }
+        
+        if not self.new_info["store_name"]:
+            CustomMessageDialog("알림", "점포명은 필수 입력 사항입니다.", 'warning', self).exec()
+            return
+            
+        self.accept()
+
+    def get_store_info(self):
+        return self.new_info
