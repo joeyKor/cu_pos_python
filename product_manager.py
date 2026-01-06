@@ -3,16 +3,16 @@ import os
 
 # Default data from the original data.py to be used for initialization
 DEFAULT_PRODUCTS = {
-    "12345": {"name": "새우깡", "price": 3000, "category": "snack"},
-    "12312": {"name": "콘칩", "price": 2000, "category": "snack"},
-    "8801": {"name": "동아)나랑드파인P500m", "price": 2000, "category": "drink"},
-    "8802": {"name": "#코카콜라P500ml", "price": 2300, "category": "drink"},
-    "8803": {"name": "친환경)CU백색봉투대", "price": 100, "category": "etc"},
-    "8804": {"name": "아이시스2L P6입", "price": 3600, "category": "water"},
-    "8805": {"name": "유앤)포켓몬볼모양젤", "price": 1000, "category": "snack"},
-    "8806": {"name": "츄파춥스12g", "price": 300, "category": "candy"},
-    "8807": {"name": "트롤리지구젤리(낱개)", "price": 1000, "category": "jelly"},
-    "8808": {"name": "트롤리지구젤리(낱개)", "price": 1000, "category": "jelly"},
+    "8801234567891": {"name": "새우깡", "price": 3000, "category": "snack"},
+    "8801234123456": {"name": "콘칩", "price": 2000, "category": "snack"},
+    "8801000000001": {"name": "동아)나랑드파인P500m", "price": 2000, "category": "drink"},
+    "8801000000002": {"name": "#코카콜라P500ml", "price": 2300, "category": "drink"},
+    "8801000000003": {"name": "친환경)CU백색봉투대", "price": 100, "category": "etc"},
+    "8801000000004": {"name": "아이시스2L P6입", "price": 3600, "category": "water"},
+    "8801000000005": {"name": "유앤)포켓몬볼모양젤", "price": 1000, "category": "snack"},
+    "8801000000006": {"name": "츄파춥스12g", "price": 300, "category": "candy"},
+    "8801000000007": {"name": "트롤리지구젤리(낱개)", "price": 1000, "category": "jelly"},
+    "8801000000008": {"name": "트롤리지구젤리(낱개)", "price": 1000, "category": "jelly"},
 }
 
 CATEGORIES = ["일반상품", "소분상품", "신문/상품권", "쓰레기 봉투/화장", "GET 커피", "고구마"]

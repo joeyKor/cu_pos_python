@@ -12,6 +12,8 @@ from product_manager import ProductManager
 from settings_page import SettingsPage
 from payment_ui import CreditCardPaymentDialog, CashPaymentDialog, CashReceiptDialog
 from welcome_page import WelcomePage
+from refund_page import RefundPage
+from receipt_inquiry_page import ReceiptInquiryPage
 from transaction_manager import TransactionManager
 from receipt_manager import ReceiptManager
 
@@ -25,6 +27,10 @@ class POSMainWindow(QMainWindow):
         self.product_manager = ProductManager()
         self.transaction_manager = TransactionManager()
         self.receipt_manager = ReceiptManager()
+        
+        self.tm = self.transaction_manager
+        self.rm = self.receipt_manager
+        self.wait_slots = [None, None, None]
         
         self.init_ui()
 
@@ -45,6 +51,9 @@ class POSMainWindow(QMainWindow):
         self.welcome_page.safeBalanceEditRequested.connect(self.handle_safe_balance_edit)
         self.welcome_page.storeRegistrationRequested.connect(self.handle_store_registration)
         self.welcome_page.lastReceiptPrintRequested.connect(self.handle_welcome_receipt_print)
+        self.welcome_page.refundRequested.connect(lambda: self.switch_page(2))
+        self.welcome_page.receiptInquiryRequested.connect(lambda: self.switch_page(3))
+        self.welcome_page.waitRequested.connect(self.handle_restore_wait)
         self.central_stack.addWidget(self.welcome_page)
         
         # Load last transaction for welcome page
@@ -54,9 +63,27 @@ class POSMainWindow(QMainWindow):
         self.sales_widget = QWidget()
         self.setup_sales_ui()
         self.central_stack.addWidget(self.sales_widget)
+
+        # 2. Refund Page
+        self.refund_page = RefundPage()
+        self.refund_page.backRequested.connect(lambda: self.switch_page(0))
+        self.refund_page.receiptInquiryRequested.connect(lambda: self.switch_page(3))
+        self.refund_page.barcodeScanned.connect(self.handle_refund_barcode)
+        self.central_stack.addWidget(self.refund_page)
+
+        # 3. Receipt Inquiry Page
+        self.receipt_inquiry_page = ReceiptInquiryPage(self.transaction_manager, self.receipt_manager)
+        self.receipt_inquiry_page.backRequested.connect(self.handle_inquiry_back)
+        self.central_stack.addWidget(self.receipt_inquiry_page)
+
+        # 4. Settings (Product Management) Page
+        self.settings_page = SettingsPage(self.product_manager, self.receipt_manager)
+        self.settings_page.backRequested.connect(self.handle_inquiry_back)
+        self.central_stack.addWidget(self.settings_page)
         
         # Start at Welcome Page
         self.central_stack.setCurrentIndex(0)
+        self.page_history = [0]
 
     def setup_sales_ui(self):
         main_layout = QVBoxLayout(self.sales_widget)
@@ -110,6 +137,21 @@ class POSMainWindow(QMainWindow):
         elif current_index == 0: # Welcome Page
             if hasattr(self, 'welcome_page') and not self.welcome_page.barcode_input.hasFocus():
                 self.welcome_page.barcode_input.setFocus()
+        elif current_index == 2: # Refund Page
+            if hasattr(self, 'refund_page') and not self.refund_page.barcode_input.hasFocus():
+                self.refund_page.barcode_input.setFocus()
+
+    def switch_page(self, index):
+        self.page_history.append(index)
+        self.central_stack.setCurrentIndex(index)
+
+    def handle_inquiry_back(self):
+        if len(self.page_history) > 1:
+            self.page_history.pop() # Remove current page
+            prev_index = self.page_history.pop() # Get previous page
+            self.switch_page(prev_index)
+        else:
+            self.switch_page(0)
 
     def create_header_frame(self):
         header_frame = QFrame()
@@ -258,6 +300,7 @@ class POSMainWindow(QMainWindow):
         btn_cancel.clicked.connect(self.clear_cart)
         
         btn_wait = ActionButton("대기", styles.BUTTON_PURPLE_STYLE.replace(styles.PRIMARY_PURPLE, "#78909C")) # Grayish
+        btn_wait.clicked.connect(self.handle_wait_click)
         split_btns.addWidget(btn_cancel)
         split_btns.addWidget(btn_wait)
 
@@ -311,11 +354,11 @@ class POSMainWindow(QMainWindow):
         # Row 1: Common Items (Shortcuts)
         # Using some predefined barcodes for these buttons
         common_items = [
-            ("친환경)CU백색봉투대\n100", "8803"), 
-            ("아이시스2L P6입\n3,600", "8804"), 
-            ("유앤)포켓몬볼모양젤\n1,000", "8805"), 
-            ("츄파춥스12g\n300", "8806"), 
-            ("트롤리지구젤리(낱개)\n1,000", "8807")
+            ("친환경)CU백색봉투대\n100", "8801000000003"), 
+            ("아이시스2L P6입\n3,600", "8801000000004"), 
+            ("유앤)포켓몬볼모양젤\n1,000", "8801000000005"), 
+            ("츄파춥스12g\n300", "8801000000006"), 
+            ("트롤리지구젤리(낱개)\n1,000", "8801000000007")
         ]
         for i, (item_text, barcode) in enumerate(common_items):
             btn = ActionButton(item_text, styles.BUTTON_BOTTOM_STYLE)
@@ -338,7 +381,7 @@ class POSMainWindow(QMainWindow):
         self.update_table_view()
 
     def on_barcode_text_changed(self, text):
-        if len(text) >= 5:
+        if len(text) >= 13:
             # Auto submit
             self.add_product(text.strip())
             self.input_barcode.clear()
@@ -612,9 +655,76 @@ class POSMainWindow(QMainWindow):
         ReceiptPreviewDialog(receipt_html, self).exec()
 
     def open_settings(self):
-        settings_dialog = SettingsPage(self.product_manager, self)
-        settings_dialog.exec()
+        self.switch_page(4)
+        # Refresh lists when entering
+        self.settings_page.load_data()
+
+    def handle_settings_back(self):
+        self.handle_inquiry_back() # Reuse same history logic
         # Refresh the current sale view if any product details changed
+        self.update_table_view()
+        self.update_totals()
+
+    def handle_refund_barcode(self, barcode):
+        if len(barcode) != 16:
+            return
+            
+        result = self.transaction_manager.mark_as_refunded(barcode)
+        
+        if result == "Success":
+            CustomMessageDialog("환불 처리", "환불처리되었습니다.", 'info', self).exec()
+            self.update_welcome_history()
+        elif result == "AlreadyRefunded":
+            CustomMessageDialog("알림", "이미 환불 처리된 영수증입니다.", 'warning', self).exec()
+        elif result == "NotFound":
+            CustomMessageDialog("조회 실패", "해당 바코드의 영수증을 찾을 수 없습니다.", 'warning', self).exec()
+        else:
+            CustomMessageDialog("오류", "환불 처리 중 오류가 발생했습니다.", 'warning', self).exec()
+
+    def handle_wait_click(self):
+        if not self.cart:
+            CustomMessageDialog("알림", "대기 처리할 상품이 없습니다.", 'warning', self).exec()
+            return
+
+        # Find first empty slot
+        idx = -1
+        for i, slot in enumerate(self.wait_slots):
+            if slot is None:
+                idx = i
+                break
+        
+        if idx == -1:
+            CustomMessageDialog("알림", "더 이상 대기할 공간이 없습니다.", 'warning', self).exec()
+            return
+            
+        # Store cart
+        self.wait_slots[idx] = [item.copy() for item in self.cart]
+        self.clear_cart()
+        
+        # Update Welcome Page UI
+        self.welcome_page.update_wait_status(self.wait_slots)
+        
+        # Go to home
+        self.go_to_home()
+        CustomMessageDialog("알림", f"대기{idx+1}에 저장되었습니다.", 'info', self).exec()
+
+    def handle_restore_wait(self, index):
+        if self.wait_slots[index] is None:
+            return
+            
+        if self.cart:
+            CustomMessageDialog("알림", "현재 작업 중인 상품이 있습니다.\n먼저 처리하거나 취소해주세요.", 'warning', self).exec()
+            return
+            
+        # Restore cart
+        self.cart = self.wait_slots[index]
+        self.wait_slots[index] = None
+        
+        # Update Welcome Page UI
+        self.welcome_page.update_wait_status(self.wait_slots)
+        
+        # Switch to Sales Page
+        self.central_stack.setCurrentIndex(1)
         self.update_table_view()
         self.update_totals()
 

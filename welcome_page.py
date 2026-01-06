@@ -17,6 +17,9 @@ class WelcomePage(QWidget):
     safeBalanceEditRequested = pyqtSignal()
     storeRegistrationRequested = pyqtSignal()
     lastReceiptPrintRequested = pyqtSignal()
+    refundRequested = pyqtSignal()
+    receiptInquiryRequested = pyqtSignal()
+    waitRequested = pyqtSignal(int)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -134,7 +137,7 @@ class WelcomePage(QWidget):
             
         add_stat("환불 :", "0건")
         add_stat("전체취소 :", "0건")
-        add_stat("등록취소 :", "1건")
+        add_stat("등록취소 :", "0건")
         
         lbl_occ = QLabel("발생하였습니다.")
         lbl_occ.setStyleSheet("font-size: 10pt; color: #555;")
@@ -173,11 +176,17 @@ class WelcomePage(QWidget):
                 btn = QPushButton(text)
                 btn.setFixedHeight(65) # Reduced from 85
                 btn.setStyleSheet(f"background-color: {color}; color: white; font-weight: bold; font-size: 11pt; border-top: 4px solid white; border-bottom: 4px solid rgba(0,0,0,0.1);")
+                if text == "영수증조회":
+                    btn.clicked.connect(self.receiptInquiryRequested.emit)
                 grid.addWidget(btn, i // 2, i % 2)
             lyt.addLayout(grid)
             return box
 
         inquiry_box = create_group_box("통합조회", "#7AB800", ["상품조회", "영수증조회", "수표조회", "교통카드잔액조회"])
+        # Connect 영수증조회 button (it's the 2nd button in the items list)
+        # items are ["상품조회", "영수증조회", "수표조회", "교통카드잔액조회"]
+        # In create_group_box, buttons are added to a grid. We need to find the right button.
+        # Let's modify create_group_box to handle clicks if needed or find it manually.
         service_box = create_group_box("서비스", "#8A79B6", ["교통카드", "택배", "프리페이드", "공공요금"])
         
         group_layout.addWidget(inquiry_box)
@@ -260,16 +269,20 @@ class WelcomePage(QWidget):
         
         wait_stack = QVBoxLayout()
         wait_stack.setSpacing(8)
+        self.wait_buttons = []
         for i in range(1, 4):
             btn_wait = QPushButton(f"대기{i}")
             btn_wait.setFixedHeight(75) # Increased from 50
             btn_wait.setStyleSheet(styles.WELCOME_SMALL_BUTTON)
+            btn_wait.clicked.connect(lambda checked, idx=i-1: self.waitRequested.emit(idx))
             wait_stack.addWidget(btn_wait)
+            self.wait_buttons.append(btn_wait)
         right_col.addLayout(wait_stack)
         
         btn_refund = QPushButton("환불")
         btn_refund.setFixedHeight(180) # Increased from 120
         btn_refund.setStyleSheet("background: #EF5350; color: white; font-weight: bold; font-size: 24pt; border-radius: 8px;")
+        btn_refund.clicked.connect(self.refundRequested.emit)
         right_col.addWidget(btn_refund)
         
         body_layout.addLayout(right_col, stretch=1)
@@ -285,11 +298,11 @@ class WelcomePage(QWidget):
         q_row = QHBoxLayout()
         q_row.setSpacing(5)
         q_items = [
-            ("친환경)CU백색봉투대\n100", "8803"), 
-            ("아이시스2L P6입\n3,600", "8804"), 
-            ("유앤)포켓몬볼모양젤\n1,000", "8805"), 
-            ("츄파춥스12g\n300", "8806"), 
-            ("트롤리지구젤리(낱개)\n1,000", "8807")
+            ("친환경)CU백색봉투대\n100", "8801000000003"), 
+            ("아이시스2L P6입\n3,600", "8801000000004"), 
+            ("유앤)포켓몬볼모양젤\n1,000", "8801000000005"), 
+            ("츄파춥스12g\n300", "8801000000006"), 
+            ("트롤리지구젤리(낱개)\n1,000", "8801000000007")
         ]
         
         for name, barcode in q_items:
@@ -385,7 +398,7 @@ class WelcomePage(QWidget):
             self.barcode_input.clear()
 
     def on_barcode_text_changed(self, text):
-        if len(text) >= 5:
+        if len(text) >= 13:
             self.on_barcode_return()
 
     def update_last_transaction(self, data):
@@ -402,6 +415,18 @@ class WelcomePage(QWidget):
 
     def update_safe_balance(self, amount):
         self.lbl_safe_val.setText(f"{amount:,}")
+
+    def update_wait_status(self, wait_slots):
+        for i, slot in enumerate(wait_slots):
+            if i < len(self.wait_buttons):
+                if slot is not None:
+                    # Green background for occupied slot
+                    self.wait_buttons[i].setStyleSheet(
+                        styles.WELCOME_SMALL_BUTTON.replace("background-color: #AAB3BF;", "background-color: #7AB800; color: white;")
+                    )
+                else:
+                    # Original style for empty slot
+                    self.wait_buttons[i].setStyleSheet(styles.WELCOME_SMALL_BUTTON)
 
     def showEvent(self, event):
         super().showEvent(event)

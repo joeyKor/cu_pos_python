@@ -191,9 +191,9 @@ class ReceiptManager:
                 .again {{ border: 2px solid #000; border-radius: 12px; padding: 1px 8px; font-size: 14pt; }}
                 table {{ width: 100%; border-collapse: collapse; margin-top: 5px; table-layout: fixed; }}
                 td {{ vertical-align: middle; padding: 1px 0; }}
-                .col-name {{ width: 60%; text-align: left; overflow: hidden; }}
-                .col-qty {{ width: 15%; text-align: left; padding-left: 5px; }}
-                .col-amt {{ width: 25%; text-align: right; }}
+                .col-name {{ width: 170px; text-align: left; overflow: hidden; white-space: nowrap; }}
+                .col-qty {{ width: 40px; text-align: right; padding-right: 5px; }}
+                .col-amt {{ width: 80px; text-align: right; }}
                 .dashed-line {{ border-top: 1px dashed #000; }}
                 .solid-line {{ border-top: 2px solid #000; }}
             </style>
@@ -222,7 +222,7 @@ class ReceiptManager:
                 <thead>
                     <tr>
                         <th class="col-name" style="text-align: left; border-top: 1px dashed #000; border-bottom: 1px dashed #000;">상품명</th>
-                        <th class="col-qty" style="text-align: left; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding-left: 5px;">수량</th>
+                        <th class="col-qty" style="text-align: right; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding-right: 5px;">수량</th>
                         <th class="col-amt" style="text-align: right; border-top: 1px dashed #000; border-bottom: 1px dashed #000;">금액</th>
                     </tr>
                 </thead>
@@ -232,7 +232,7 @@ class ReceiptManager:
                     <!-- Total Purchase Amount with Dividers -->
                     <tr><td colspan="3" class="dashed-line" style="padding-top: 5px;"></td></tr>
                     <tr class="bold" style="font-size: 11pt;">
-                        <td>총 구 매 액</td>
+                        <td class="col-name">총 구 매 액</td>
                         <td class="col-qty">{len(items)}</td>
                         <td class="col-amt">{total_amt:,}</td>
                     </tr>
@@ -251,7 +251,7 @@ class ReceiptManager:
                     <!-- Total Payment -->
                     <tr><td colspan="3" style="padding-top: 5px;"></td></tr>
                     <tr class="bold" style="font-size: 13pt; border-bottom: 2px solid #000;">
-                        <td>결 제 금 액</td>
+                        <td class="col-name">결 제 금 액</td>
                         <td colspan="2" class="col-amt">{total_amt:,}</td>
                     </tr>
                     

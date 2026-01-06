@@ -309,7 +309,7 @@ class CustomMessageDialog(QDialog):
                     font-size: 11pt;
                     font-weight: bold;
                 }}
-                QPushButton:hover {{ filter: brightness(90%); }}
+                QPushButton:hover {{ background-color: #E0E0E0; }}
             """)
             btn_ok.clicked.connect(self.accept_dialog)
             
