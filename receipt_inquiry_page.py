@@ -79,6 +79,10 @@ class ReceiptInquiryPage(QWidget):
                 border: none;
                 border-bottom: 1px solid #DEE2E6;
             }
+            QTableWidget::item:selected {
+                background-color: #7AB800;
+                color: white;
+            }
         """)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)

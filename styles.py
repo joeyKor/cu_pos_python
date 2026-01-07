@@ -97,9 +97,9 @@ BUTTON_RED_STYLE = f"""
         color: {WHITE};
         border: none;
         border-radius: 5px;
-        padding: 10px;
+        padding: 15px;
         font-family: '{FONT_FAMILY}';
-        font-size: {FONT_SIZE_MEDIUM};
+        font-size: {FONT_SIZE_LARGE};
         font-weight: bold;
     }}
 """
@@ -259,10 +259,10 @@ WELCOME_CATEGORY_BUTTON = """
 WELCOME_QUICK_ITEM_FRAME = """
     QFrame {
         background-color: white;
-        border: 1px solid #DEE2E6;
+        border: none;
         border-radius: 4px;
     }
 """
 
-WELCOME_PRICE_LABEL = "color: #D32F2F; font-weight: bold; font-size: 11pt;"
-WELCOME_ITEM_NAME_LABEL = "color: #333333; font-weight: bold; font-size: 10pt;"
+WELCOME_PRICE_LABEL = "color: #D32F2F; font-weight: bold; font-size: 10pt;"
+WELCOME_ITEM_NAME_LABEL = "color: #333333; font-weight: bold; font-size: 9pt;"

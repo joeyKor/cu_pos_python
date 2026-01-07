@@ -31,6 +31,7 @@ class POSMainWindow(QMainWindow):
         self.tm = self.transaction_manager
         self.rm = self.receipt_manager
         self.wait_slots = [None, None, None]
+        self.current_wait_index = -1
         
         self.init_ui()
 
@@ -126,8 +127,15 @@ class POSMainWindow(QMainWindow):
 
     def go_to_home(self):
         self.clear_cart()
+        self.reset_wait_state()
+        self.update_welcome_history()
         # Return to Welcome Page
         self.central_stack.setCurrentIndex(0)
+
+    def reset_wait_state(self):
+        self.current_wait_index = -1
+        if hasattr(self, 'btn_wait'):
+            self.btn_wait.setText("대기")
 
     def ensure_barcode_focus(self):
         current_index = self.central_stack.currentIndex()
@@ -301,6 +309,7 @@ class POSMainWindow(QMainWindow):
         
         btn_wait = ActionButton("대기", styles.BUTTON_PURPLE_STYLE.replace(styles.PRIMARY_PURPLE, "#78909C")) # Grayish
         btn_wait.clicked.connect(self.handle_wait_click)
+        self.btn_wait = btn_wait
         split_btns.addWidget(btn_cancel)
         split_btns.addWidget(btn_wait)
 
@@ -466,6 +475,7 @@ class POSMainWindow(QMainWindow):
         
     def clear_cart(self):
         self.cart = []
+        self.reset_wait_state()
         self.update_table_view()
         self.update_totals()
         self.input_barcode.setFocus()
@@ -539,8 +549,7 @@ class POSMainWindow(QMainWindow):
             receipt_html = self.receipt_manager.generate_html(tx_data)
             ReceiptPreviewDialog(receipt_html, self).exec()
             
-            self.clear_cart()
-            self.update_welcome_history()
+            self.go_to_home()
             CustomMessageDialog("결제 완료", f"{total_amt:,}원 결제가 완료되었습니다.", 'info', self).exec()
 
     def open_cash_payment(self):
@@ -595,9 +604,7 @@ class POSMainWindow(QMainWindow):
                 receipt_html = self.receipt_manager.generate_html(tx_data)
                 ReceiptPreviewDialog(receipt_html, self).exec()
 
-                self.clear_cart()
-                self.update_welcome_history()
-                
+                self.go_to_home()
                 CustomMessageDialog("결제 완료", f"현금 {total_amt:,}원 결제가 완료되었습니다.\n거스름돈: {change_amt:,}원", 'info', self).exec()
 
     def update_welcome_history(self):
@@ -686,6 +693,13 @@ class POSMainWindow(QMainWindow):
             CustomMessageDialog("알림", "대기 처리할 상품이 없습니다.", 'warning', self).exec()
             return
 
+        # If it's a restored wait session, it acts as "Cancel"
+        if self.current_wait_index != -1:
+            self.clear_cart()
+            # self.reset_wait_state() is called within clear_cart
+            self.go_to_home()
+            return
+
         # Find first empty slot
         idx = -1
         for i, slot in enumerate(self.wait_slots):
@@ -719,6 +733,8 @@ class POSMainWindow(QMainWindow):
         # Restore cart
         self.cart = self.wait_slots[index]
         self.wait_slots[index] = None
+        self.current_wait_index = index
+        self.btn_wait.setText("대기 취소")
         
         # Update Welcome Page UI
         self.welcome_page.update_wait_status(self.wait_slots)

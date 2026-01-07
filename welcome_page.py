@@ -35,24 +35,20 @@ class WelcomePage(QWidget):
 
         # 1. Header (Banner Area)
         header_frame = QFrame()
-        header_frame.setFixedHeight(300)
+        header_frame.setFixedHeight(360) # Reduced from 450 to save space
         header_frame.setObjectName("header_banner")
-        header_frame.setStyleSheet("background-color: white; border-bottom: 2px solid #DEE2E6;")
+        # Universal White background to eliminate color mismatches
+        header_frame.setStyleSheet("background-color: white; border: none;")
         
-        # Background Image (Using QLabel for better scaling control)
-        banner_path = r"C:\Users\joy\.gemini\antigravity\brain\6adb7436-f2cf-4cd3-90c3-8b61c64acc9a\cu_store_mascot_bg_1767191372811.png"
-        if os.path.exists(banner_path):
-            bg_label = QLabel(header_frame)
-            pixmap = QPixmap(banner_path)
-            self.original_pixmap = pixmap # Store the original pixmap
-            bg_label.setPixmap(pixmap)
-            # bg_label.setScaledContents(True) # Removed to maintain aspect ratio manually
-            bg_label.resize(1920, 300) # Initial size
-            bg_label.lower() 
-            self.bg_label = bg_label 
-        
+        base_path = r"C:\Users\joy\.gemini\antigravity\brain\eeed31fe-3ea1-4e4b-86a1-382a798d07a3"
+        store_img = os.path.join(base_path, "cu_store_recreated_v1_1767798621656.png")
+        mascot_img = os.path.join(base_path, "cu_mascot_fullbody_white_background_1767715363864.png")
+
+        # Background Landscape is now a solid color matching the assets
+        self.bg_label = None 
+
         header_layout = QVBoxLayout(header_frame)
-        header_layout.setContentsMargins(0, 50, 0, 0)
+        header_layout.setContentsMargins(0, 10, 0, 0)
         header_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
 
         # Top Right Button Area (Overlay)
@@ -62,76 +58,112 @@ class WelcomePage(QWidget):
         top_btn_layout.addStretch()
         
         btn_exit = QPushButton("종료")
-        btn_exit.setFixedSize(80, 40)
-        btn_exit.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_exit.setFixedSize(70, 35)
         btn_exit.setStyleSheet("""
             QPushButton {
-                background-color: #EF5350;
-                color: white;
+                background-color: rgba(239, 83, 80, 0.1);
+                color: #EF5350;
                 font-weight: bold;
-                border-radius: 5px;
-                font-size: 11pt;
+                border: 1px solid #EF5350;
+                border-radius: 4px;
             }
-            QPushButton:hover { background-color: #D32F2F; }
+            QPushButton:hover { background-color: #EF5350; color: white; }
         """)
         btn_exit.clicked.connect(self.handle_exit)
         top_btn_layout.addWidget(btn_exit)
-        self.top_btn_container = top_btn_container # For positioning
+        self.top_btn_container = top_btn_container
 
-        # Greeting Text (Transparent Background)
+        # Greeting Text
         greeting_label = QLabel("어서오세요. CU입니다.")
-        greeting_label.setStyleSheet("font-size: 32pt; font-weight: bold; color: #333333; background: transparent;")
+        greeting_label.setStyleSheet("font-size: 34pt; font-weight: bold; color: #2C3E50; background: transparent;")
         header_layout.addWidget(greeting_label, alignment=Qt.AlignmentFlag.AlignHCenter)
-        
-        # Center Barcode Area (White Rounded Container)
+        header_layout.addSpacing(10)
+
+        # Flanking Layout: [Store] [Barcode] [Mascot]
+        middle_row = QWidget()
+        middle_row_layout = QHBoxLayout(middle_row)
+        middle_row_layout.setContentsMargins(0, 0, 0, 0)
+        middle_row_layout.setSpacing(0) 
+        middle_row_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        middle_row_layout.addStretch()
+
+        # Store Icon (Left of Barcode) - Aligned to Top
+        if os.path.exists(store_img):
+            self.store_label = QLabel()
+            # Scaling slightly smaller to fit well without clipping
+            store_pix = QPixmap(store_img).scaled(280, 280, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.store_label.setPixmap(store_pix)
+            # AlignTop helps "move it up" while ensuring it fits in the layout
+            self.store_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+            self.store_label.setFixedSize(280, 280)
+            middle_row_layout.addWidget(self.store_label)
+            middle_row_layout.addSpacing(20) # Spacer between store and barcode
+
+        # Barcode Area (Center)
         barcode_container_outer = QWidget()
-        barcode_container_outer.setFixedWidth(600)
-        barcode_container_outer.setFixedHeight(70)
+        barcode_container_outer.setFixedWidth(650)
+        barcode_container_outer.setFixedHeight(75)
         barcode_container_outer.setObjectName("input_container")
-        barcode_container_outer.setStyleSheet(styles.WELCOME_INPUT_CONTAINER)
-        
+        barcode_container_outer.setStyleSheet("""
+            QWidget#input_container {
+                background-color: #F8F9FA;
+                border: none;
+                border-radius: 37px;
+            }
+        """)
         barcode_inner_lyt = QHBoxLayout(barcode_container_outer)
-        barcode_inner_lyt.setContentsMargins(20, 0, 20, 0)
-        
-        # Logo placeholder
-        chatbot_logo = QLabel("CU스쿨\nChatbot")
-        chatbot_logo.setStyleSheet("font-size: 8pt; color: #333; font-weight: bold; line-height: 1.0; background: transparent;")
-        barcode_inner_lyt.addWidget(chatbot_logo)
-        
+        barcode_inner_lyt.setContentsMargins(30, 0, 30, 0)
         self.barcode_input = QLineEdit()
         self.barcode_input.setPlaceholderText("바코드를 스캔하세요")
-        self.barcode_input.setStyleSheet(styles.WELCOME_INPUT_STYLE + "background: transparent;")
+        self.barcode_input.setStyleSheet(styles.WELCOME_INPUT_STYLE + "background: transparent; color: #333; font-size: 20pt;")
         self.barcode_input.returnPressed.connect(self.on_barcode_return)
         self.barcode_input.textChanged.connect(self.on_barcode_text_changed)
         barcode_inner_lyt.addWidget(self.barcode_input)
-        
-        barcode_icon = QLabel("[ |||| ]") # Placeholder for scanner icon
-        barcode_icon.setStyleSheet("font-size: 18pt; color: #999; background: transparent;")
+        barcode_icon = QLabel("| [||||]|")
+        barcode_icon.setStyleSheet("font-size: 20pt; color: #7F8C8D; background: transparent;")
         barcode_inner_lyt.addWidget(barcode_icon)
-        
-        header_layout.addSpacing(20)
-        header_layout.addWidget(barcode_container_outer, alignment=Qt.AlignmentFlag.AlignHCenter)
+        middle_row_layout.addWidget(barcode_container_outer)
 
-        # Stats Overlay (Top Right of Main Frame)
+        # Mascot Icon (Right of Barcode) - Full-body
+        if os.path.exists(mascot_img):
+            self.mascot_label = QLabel()
+            mascot_pix = QPixmap(mascot_img).scaled(280, 280, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.mascot_label.setPixmap(mascot_pix)
+            self.mascot_label.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+            self.mascot_label.setFixedSize(280, 280)
+            # No spacing between barcode and mascot for "immediately right"
+            middle_row_layout.addWidget(self.mascot_label)
+
+        middle_row_layout.addStretch()
+        header_layout.addWidget(middle_row)
+        header_layout.addSpacing(30) # Bottom padding as requested
+
+        # Stats Card
         stats_widget = QFrame(header_frame)
-        stats_widget.setFixedSize(240, 140)
-        stats_widget.setStyleSheet("background: rgba(255, 255, 255, 0.7); border: none; border-radius: 8px;") # More transparent
-        
+        stats_widget.setFixedSize(260, 160)
+        stats_widget.setStyleSheet("""
+            QFrame {
+                background: rgba(248, 249, 250, 0.95); 
+                border: none; 
+                border-radius: 12px;
+            }
+        """)
         s_lyt = QVBoxLayout(stats_widget)
-        s_lyt.setSpacing(4)
-        
+        s_lyt.setContentsMargins(15, 12, 15, 12)
+        s_lyt.setSpacing(6)
         lbl_s_title = QLabel("지금 포스에서는")
-        lbl_s_title.setStyleSheet("font-size: 11pt; font-weight: bold; color: #555; background: transparent;")
+        lbl_s_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_s_title.setStyleSheet("font-size: 11pt; font-weight: bold; color: #34495E; background: transparent;")
         s_lyt.addWidget(lbl_s_title)
         
         def add_stat(label, value):
             h = QHBoxLayout()
             lbl_l = QLabel(label)
-            lbl_l.setStyleSheet("font-size: 11pt; color: #333; background: transparent;")
+            lbl_l.setStyleSheet("font-size: 10pt; color: #5D6D7E; background: transparent;")
             h.addWidget(lbl_l)
             h.addStretch()
             v = QLabel(value)
-            v.setStyleSheet("font-size: 11pt; color: #D32F2F; font-weight: bold; background: transparent;")
+            v.setStyleSheet("font-size: 10pt; color: #9162C0; font-weight: bold; background: transparent; text-decoration: underline;")
             h.addWidget(v)
             s_lyt.addLayout(h)
             
@@ -140,10 +172,11 @@ class WelcomePage(QWidget):
         add_stat("등록취소 :", "0건")
         
         lbl_occ = QLabel("발생하였습니다.")
-        lbl_occ.setStyleSheet("font-size: 10pt; color: #555;")
+        lbl_occ.setAlignment(Qt.AlignmentFlag.AlignRight)
+        lbl_occ.setStyleSheet("font-size: 10pt; font-weight: bold; color: #34495E; background: transparent;")
         s_lyt.addWidget(lbl_occ)
         
-        self.stats_widget = stats_widget # Keep reference for positioning
+        self.stats_widget = stats_widget
         
         main_layout.addWidget(header_frame)
 
@@ -154,33 +187,90 @@ class WelcomePage(QWidget):
         body_layout.setSpacing(15)
 
         # --- Dashboard LEFT: Inquiry & Service (Side-by-side) ---
-        group_layout = QHBoxLayout()
-        group_layout.setSpacing(10)
+        dashboard_left_frame = QFrame()
+        dashboard_left_frame.setStyleSheet("background-color: #2D2F3A; border-radius: 12px;")
+        group_layout = QHBoxLayout(dashboard_left_frame)
+        group_layout.setContentsMargins(15, 15, 15, 15)
+        group_layout.setSpacing(15)
 
         def create_group_box(title, color, items):
-            box = QFrame()
-            box.setStyleSheet(f"background: #ECEFF1; border-radius: 8px; border: none;")
-            lyt = QVBoxLayout(box)
-            lyt.setContentsMargins(0, 0, 0, 0)
-            lyt.setSpacing(0)
-            
+            container = QWidget()
+            layout = QVBoxLayout(container)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(10)
+
+            # Header Button-style label
             hdr = QPushButton(title)
-            hdr.setFixedHeight(80) # Reduced from 110
-            hdr.setStyleSheet(f"background-color: {color}; color: white; font-weight: bold; font-size: 18pt; border-top-left-radius: 8px; border-top-right-radius: 8px; border: none;")
-            lyt.addWidget(hdr)
-            
+            hdr.setFixedHeight(110)
+            hdr.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {color};
+                    color: white;
+                    font-weight: bold;
+                    font-size: 24pt;
+                    border-radius: 12px;
+                    border: none;
+                }}
+            """)
+            layout.addWidget(hdr)
+
+            # Grid for sub-items
             grid = QGridLayout()
-            grid.setContentsMargins(10, 10, 10, 10)
-            grid.setSpacing(10)
+            grid.setContentsMargins(0, 0, 0, 0)
+            grid.setSpacing(8)
+            
             for i, text in enumerate(items):
-                btn = QPushButton(text)
-                btn.setFixedHeight(65) # Reduced from 85
-                btn.setStyleSheet(f"background-color: {color}; color: white; font-weight: bold; font-size: 11pt; border-top: 4px solid white; border-bottom: 4px solid rgba(0,0,0,0.1);")
+                btn = QPushButton()
+                btn_layout = QVBoxLayout(btn)
+                btn_layout.setContentsMargins(0, 0, 0, 10)
+                btn_layout.setSpacing(0)
+                
+                # Top Accent Bar
+                accent = QFrame()
+                accent.setFixedHeight(8)
+                accent.setStyleSheet(f"background-color: {color}; border-top-left-radius: 6px; border-top-right-radius: 6px;")
+                btn_layout.addWidget(accent)
+                
+                btn_layout.addStretch()
+                
+                # Text Label
+                lbl = QLabel(text)
+                lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                lbl.setStyleSheet("color: white; font-weight: bold; font-size: 13pt; background: transparent;")
+                lbl.setWordWrap(True)
+                btn_layout.addWidget(lbl)
+                
+                btn_layout.addStretch()
+                
+                # Bottom Icon (Circle with dot/arrow)
+                icon_lbl = QLabel("▼") # Using a simple character for the icon as per visual
+                icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                icon_lbl.setFixedSize(20, 20)
+                icon_lbl.setStyleSheet(f"background-color: {color}; color: white; border-radius: 10px; font-size: 8pt; margin-bottom: 5px;")
+                btn_layout.addWidget(icon_lbl, alignment=Qt.AlignmentFlag.AlignHCenter)
+
+                btn.setFixedHeight(140)
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: #3F414E;
+                        border-radius: 8px;
+                        border: none;
+                    }}
+                    QPushButton:pressed {{
+                        background-color: #2D2F3A;
+                    }}
+                """)
+                
                 if text == "영수증조회":
                     btn.clicked.connect(self.receiptInquiryRequested.emit)
+                elif text == "교통카드잔액조회":
+                    # Potentially add logic if needed, but for now just UI
+                    pass
+                
                 grid.addWidget(btn, i // 2, i % 2)
-            lyt.addLayout(grid)
-            return box
+            
+            layout.addLayout(grid)
+            return container
 
         inquiry_box = create_group_box("통합조회", "#7AB800", ["상품조회", "영수증조회", "수표조회", "교통카드잔액조회"])
         # Connect 영수증조회 button (it's the 2nd button in the items list)
@@ -191,10 +281,13 @@ class WelcomePage(QWidget):
         
         group_layout.addWidget(inquiry_box)
         group_layout.addWidget(service_box)
-        body_layout.addLayout(group_layout, stretch=6)
+        body_layout.addWidget(dashboard_left_frame, stretch=6)
 
         # --- Dashboard CENTER: Payment & Safe & History ---
-        center_col = QVBoxLayout()
+        center_col_frame = QFrame()
+        center_col_frame.setStyleSheet("background-color: #2D2F3A; border-radius: 12px;")
+        center_col = QVBoxLayout(center_col_frame)
+        center_col.setContentsMargins(10, 10, 10, 10)
         center_col.setSpacing(10)
 
         # Top row: Payment & Safe (Side-by-side)
@@ -203,11 +296,11 @@ class WelcomePage(QWidget):
 
         btn_disc_top = QPushButton("결제 후\n할인 · 현금영수증")
         btn_disc_top.setFixedHeight(160)
-        btn_disc_top.setStyleSheet("background: #ECEFF1; border: none; border-radius: 8px; font-weight: bold; font-size: 15pt; color: #333;") # Removed border, increased font
+        btn_disc_top.setStyleSheet("background: #ECEFF1; border: none; border-radius: 8px; font-weight: bold; font-size: 15pt; color: #333;")
         
         safe_frame = QFrame()
         safe_frame.setFixedHeight(160)
-        safe_frame.setStyleSheet("background: #ECEFF1; border: none; border-radius: 8px;") # Removed border
+        safe_frame.setStyleSheet("background: #ECEFF1; border: none; border-radius: 8px;")
         safe_lyt = QVBoxLayout(safe_frame)
         safe_lyt.setContentsMargins(15, 15, 15, 15)
         safe_lyt.addWidget(QLabel("금고보관", styleSheet="font-weight: bold; font-size: 14pt; color: #555;"))
@@ -224,7 +317,7 @@ class WelcomePage(QWidget):
 
         # Transaction History (Below)
         hist_box = QFrame()
-        hist_box.setFixedHeight(240) # Decreased height from stretching to fixed 240
+        hist_box.setFixedHeight(210) # Reduced from 240
         hist_box.setStyleSheet("background: white; border: none; border-radius: 8px;")
         hist_lyt = QVBoxLayout(hist_box)
         hist_lyt.setContentsMargins(30, 15, 30, 15) # Adjusted vertical margin
@@ -232,7 +325,7 @@ class WelcomePage(QWidget):
         
         h_title_lyt = QHBoxLayout()
         lbl_h_title = QLabel("직전결제내역")
-        lbl_h_title.setStyleSheet("font-weight: bold; font-size: 20pt; color: #333;") # Increased from 16pt
+        lbl_h_title.setStyleSheet("font-weight: bold; font-size: 20pt; color: #333;")
         h_title_lyt.addWidget(lbl_h_title)
         
         btn_print = QPushButton("영수증 출력")
@@ -245,13 +338,13 @@ class WelcomePage(QWidget):
         def add_hist_row(label, val, bold=False):
             h_row = QHBoxLayout()
             lbl = QLabel(label)
-            lbl.setStyleSheet("font-size: 16pt; color: #555;") # Increased from 14pt
+            lbl.setStyleSheet("font-size: 16pt; color: #555;")
             h_row.addWidget(lbl)
             h_row.addStretch()
             v = QLabel(val)
             f_bold = "font-weight: bold;" if bold else ""
             color = "#333" if not bold else "#D32F2F" if "거스름돈" not in label else "#333"
-            v.setStyleSheet(f"font-size: 22pt; {f_bold} color: {color};") # Increased from 16pt
+            v.setStyleSheet(f"font-size: 22pt; {f_bold} color: {color};")
             h_row.addWidget(v)
             hist_lyt.addLayout(h_row)
             return v
@@ -261,10 +354,13 @@ class WelcomePage(QWidget):
         self.lbl_hist_change = add_hist_row("거스름돈", "0 원")
         
         center_col.addWidget(hist_box) # Removed stretch to respect fixed height
-        body_layout.addLayout(center_col, stretch=3)
+        body_layout.addWidget(center_col_frame, stretch=3)
 
         # --- Dashboard RIGHT: Wait & Refund (Wait above, Refund below) ---
-        right_col = QVBoxLayout()
+        right_col_frame = QFrame()
+        right_col_frame.setStyleSheet("background-color: #2D2F3A; border-radius: 12px;")
+        right_col = QVBoxLayout(right_col_frame)
+        right_col.setContentsMargins(10, 10, 10, 10)
         right_col.setSpacing(10)
         
         wait_stack = QVBoxLayout()
@@ -285,7 +381,7 @@ class WelcomePage(QWidget):
         btn_refund.clicked.connect(self.refundRequested.emit)
         right_col.addWidget(btn_refund)
         
-        body_layout.addLayout(right_col, stretch=1)
+        body_layout.addWidget(right_col_frame, stretch=1)
 
         main_layout.addWidget(body_container, stretch=1)
 
@@ -308,11 +404,12 @@ class WelcomePage(QWidget):
         for name, barcode in q_items:
             # Need to get current price for these but let's use placeholders as per image
             f = QFrame()
-            f.setFixedHeight(80)
+            f.setFixedHeight(65)
             f.setObjectName("quick_item")
             f.setStyleSheet(styles.WELCOME_QUICK_ITEM_FRAME)
             l = QVBoxLayout(f)
-            l.setContentsMargins(10, 10, 10, 10)
+            l.setContentsMargins(5, 5, 5, 5)
+            l.setSpacing(0)
             
             n_parts = name.split("\n")
             it_name = QLabel(n_parts[0])
@@ -324,7 +421,6 @@ class WelcomePage(QWidget):
             it_price.setAlignment(Qt.AlignmentFlag.AlignCenter)
             
             l.addWidget(it_name)
-            l.addStretch()
             l.addWidget(it_price)
             q_row.addWidget(f, stretch=1)
             
@@ -335,14 +431,14 @@ class WelcomePage(QWidget):
         cat_row.setSpacing(2)
         btn_l_arr = QPushButton("<")
         btn_l_arr.setFixedSize(40, 50)
-        btn_l_arr.setStyleSheet("background: white; border: 1px solid #DEE2E6;")
+        btn_l_arr.setStyleSheet("background: white; border: none;")
         cat_row.addWidget(btn_l_arr)
         
         cats = [("일반상품", "#7AB800"), ("소분상품", "#6C757D"), ("신문/상품권", "#6C757D"), ("쓰레기봉투/화장", "#6C757D"), ("점포등록", "#6C757D"), ("상품관리", "#6C757D")]
         for n, c in cats:
             b = QPushButton(n)
             b.setFixedHeight(50)
-            b.setStyleSheet(f"background: white; color: #333; font-weight: bold; border: 1px solid #DEE2E6; border-top: 4px solid {c};")
+            b.setStyleSheet(f"background: white; color: #333; font-weight: bold; border: none; border-top: 4px solid {c};")
             if n == "상품관리":
                 b.clicked.connect(self.settingsRequested.emit)
             elif n == "점포등록":
@@ -351,7 +447,7 @@ class WelcomePage(QWidget):
             
         btn_r_arr = QPushButton(">")
         btn_r_arr.setFixedSize(40, 50)
-        btn_r_arr.setStyleSheet("background: white; border: 1px solid #DEE2E6;")
+        btn_r_arr.setStyleSheet("background: white; border: none;")
         cat_row.addWidget(btn_r_arr)
         
         bottom_lyt.addLayout(cat_row)
@@ -361,30 +457,12 @@ class WelcomePage(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         
-        # 1. Scaled Background Banner (Maintaining Aspect Ratio)
-        if hasattr(self, 'bg_label') and hasattr(self, 'original_pixmap'):
-            canvas_w = self.width()
-            canvas_h = 300 # Fixed banner height
+        # 1. Position Stats Widget (Top Right Overlay)
+        if hasattr(self, 'stats_widget') and self.stats_widget:
+            self.stats_widget.move(self.width() - 280, 60) # Moved up from 80
             
-            # Scale pixmap to fill the width while maintaining aspect ratio
-            scaled_pixmap = self.original_pixmap.scaled(
-                canvas_w, canvas_h, 
-                Qt.AspectRatioMode.KeepAspectRatioByExpanding, 
-                Qt.TransformationMode.SmoothTransformation
-            )
-            self.bg_label.setPixmap(scaled_pixmap)
-            self.bg_label.resize(canvas_w, canvas_h)
-            
-            # Center the pixmap if it's larger than the label after scaling
-            # (KeepAspectRatioByExpanding ensures it fills, but we might want to offset)
-            # For now, just setting it to fill the label is usually enough if it's centered.
-
-        # 2. Position Stats Widget (Top Right)
-        if hasattr(self, 'stats_widget'):
-            self.stats_widget.move(self.width() - 250, 40)
-            
-        # 3. Position Top Buttons Container
-        if hasattr(self, 'top_btn_container'):
+        # 2. Position Top Buttons Container
+        if hasattr(self, 'top_btn_container') and self.top_btn_container:
             self.top_btn_container.setGeometry(0, 0, self.width(), 50)
     def handle_exit(self):
         window = self.window()

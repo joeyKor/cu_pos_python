@@ -22,7 +22,7 @@ class CreditCardPaymentDialog(QDialog):
         self.container.setStyleSheet(f"""
             QFrame {{
                 background-color: {styles.WHITE};
-                border: 1px solid #9E9E9E;
+                border: none;
             }}
         """)
         
@@ -47,11 +47,14 @@ class CreditCardPaymentDialog(QDialog):
         # 3. Footer
         self.create_footer()
         
+        # Set Focus to Card Number
+        self.txt_card_num.setFocus()
+        
     def create_header(self):
         header = QFrame()
         header.setStyleSheet("""
             background-color: #5c6bc0; /* Indigo shade matching image */
-            border-bottom: 1px solid #3f51b5;
+            border: none;
         """)
         header.setFixedHeight(40)
         hbox = QHBoxLayout(header)
@@ -99,7 +102,7 @@ class CreditCardPaymentDialog(QDialog):
                 background-color: #5C6BC0; 
                 color: white; 
                 font-weight: bold;
-                border: 1px solid #3F51B5;
+                border: none;
                 font-size: 10pt;
             }
         """)
@@ -113,7 +116,7 @@ class CreditCardPaymentDialog(QDialog):
         vbox.addWidget(self.create_section_label("카드정보"))
         
         card_info_frame = QFrame()
-        card_info_frame.setStyleSheet("background-color: #E8EAF6; border: 1px solid #C5CAE9;") 
+        card_info_frame.setStyleSheet("background-color: #E8EAF6; border: none;") 
         card_grid = QGridLayout(card_info_frame)
         card_grid.setContentsMargins(0, 0, 0, 0)
         card_grid.setSpacing(1) # Gap for grid lines
@@ -144,7 +147,7 @@ class CreditCardPaymentDialog(QDialog):
         vbox.addWidget(self.create_section_label("결제정보"))
         
         pay_info_frame = QFrame()
-        pay_info_frame.setStyleSheet("background-color: #E8EAF6; border: 1px solid #C5CAE9;")
+        pay_info_frame.setStyleSheet("background-color: #E8EAF6; border: none;")
         pay_grid = QGridLayout(pay_info_frame)
         pay_grid.setContentsMargins(0, 0, 0, 0)
         pay_grid.setSpacing(1)
@@ -203,7 +206,7 @@ class CreditCardPaymentDialog(QDialog):
         # Status Bar look-alike (empty gray box)
         status_bar = QLabel("")
         status_bar.setFixedHeight(40)
-        status_bar.setStyleSheet("background-color: #CFD8DC; border: 1px solid #B0BEC5;")
+        status_bar.setStyleSheet("background-color: #CFD8DC; border: none;")
         vbox.addWidget(status_bar)
         
         self.layout.addWidget(content_widget)
