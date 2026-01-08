@@ -1,7 +1,8 @@
 import sys, random, datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, 
-                             QLabel, QLineEdit, QGridLayout, QFrame, QAbstractItemView, QPushButton, QStackedWidget, QInputDialog)
+                             QLabel, QLineEdit, QGridLayout, QFrame, QAbstractItemView, 
+                             QPushButton, QStackedWidget, QInputDialog, QSizePolicy)
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor
 
@@ -45,7 +46,16 @@ class POSMainWindow(QMainWindow):
         
         # Main Stacked Widget
         self.central_stack = QStackedWidget()
-        self.setCentralWidget(self.central_stack)
+        
+        # Wrap the stack in a Scroll Area for low resolution support
+        from PyQt6.QtWidgets import QScrollArea
+        scroll_area = QScrollArea()
+        scroll_area.setWidget(self.central_stack)
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        scroll_area.setStyleSheet("background-color: transparent;")
+        
+        self.setCentralWidget(scroll_area)
         
         # 0. Welcome Page (Start Screen)
         self.welcome_page = WelcomePage()
@@ -209,7 +219,7 @@ class POSMainWindow(QMainWindow):
 
         # Product Table
         self.table = QTableWidget()
-        self.table.setFixedHeight(550) # Increase vertical size as requested
+        self.table.setMinimumHeight(400) # Minimum height instead of fixed
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(["NO", "상품명", "수량", "단가", "금액", "할인"])
         self.table.setStyleSheet(styles.TABLE_STYLE + styles.SCROLLBAR_STYLE)
@@ -287,7 +297,8 @@ class POSMainWindow(QMainWindow):
         btn_bottom = QPushButton("⏬")
         
         for btn in [btn_top, btn_up, btn_down, btn_bottom]:
-            btn.setFixedSize(60, 150) # Total height is 550(table)+50(footer)=600. 600/4 = 150
+            btn.setFixedWidth(60) 
+            btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
             btn.setStyleSheet(styles.WELCOME_SCROLL_BUTTON_STYLE)
             scroll_panel.addWidget(btn)
         
@@ -392,27 +403,27 @@ class POSMainWindow(QMainWindow):
         right_layout.setSpacing(2)
 
         # Buttons
-        button_height = 110 # Consistent height for all
-
+        button_min_height = 80 # Smaller minimum height to allow shrinking
+        
         btn_affiliate = ActionButton("제휴 할인 및\n포인트 적립/사용", styles.BUTTON_GREEN_STYLE, "ⓟ")
-        btn_affiliate.setFixedHeight(button_height)
+        btn_affiliate.setMinimumHeight(button_min_height)
         
         btn_coupon = ActionButton("CU키핑쿠폰 발급", styles.BUTTON_GREEN_STYLE, "🎫")
-        btn_coupon.setFixedHeight(button_height)
+        btn_coupon.setMinimumHeight(button_min_height)
         
         btn_card = ActionButton("신용카드", styles.BUTTON_PURPLE_STYLE, "💳")
-        btn_card.setFixedHeight(button_height)
+        btn_card.setMinimumHeight(button_min_height)
         btn_card.clicked.connect(self.open_card_payment)
         
         btn_cash = ActionButton("현금", styles.BUTTON_PURPLE_STYLE, "💰")
-        btn_cash.setFixedHeight(button_height)
+        btn_cash.setMinimumHeight(button_min_height)
         btn_cash.clicked.connect(self.open_cash_payment)
         
         btn_mobile_pay = ActionButton("모바일\n(CU머니 번호결제)", styles.BUTTON_PURPLE_STYLE, "📱")
-        btn_mobile_pay.setFixedHeight(button_height)
+        btn_mobile_pay.setMinimumHeight(button_min_height)
         
         btn_pay_select = ActionButton("결제선택", styles.BUTTON_GREEN_STYLE, "👛")
-        btn_pay_select.setFixedHeight(button_height)
+        btn_pay_select.setMinimumHeight(button_min_height)
 
         # Store references for multi-payment
         self.btn_card = btn_card
@@ -422,11 +433,11 @@ class POSMainWindow(QMainWindow):
         # Split Cancel/Wait
         split_btns = QHBoxLayout()
         btn_cancel = ActionButton("전체취소", styles.BUTTON_RED_STYLE)
-        btn_cancel.setFixedHeight(button_height)
+        btn_cancel.setMinimumHeight(button_min_height)
         btn_cancel.clicked.connect(self.clear_cart)
         
         btn_wait = ActionButton("대기", styles.BUTTON_PURPLE_STYLE.replace(styles.PRIMARY_PURPLE, "#78909C")) # Grayish
-        btn_wait.setFixedHeight(button_height)
+        btn_wait.setMinimumHeight(button_min_height)
         btn_wait.clicked.connect(self.handle_wait_click)
         self.btn_wait = btn_wait
         split_btns.addWidget(btn_cancel)

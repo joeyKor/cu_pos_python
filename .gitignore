@@ -12,3 +12,6 @@ venv.bak/
 .idea/
 *.json
 !product_manager.json
+build/
+dist/
+*.spec

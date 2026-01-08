@@ -47,7 +47,7 @@ class SettingsPage(QWidget):
 
     def create_header(self):
         header_frame = QFrame()
-        header_frame.setFixedHeight(80)
+        header_frame.setMinimumHeight(60)
         header_frame.setStyleSheet("background-color: white; border-bottom: 2px solid #DEE2E6;")
         header_layout = QHBoxLayout(header_frame)
         header_layout.setContentsMargins(30, 0, 30, 0)
