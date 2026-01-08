@@ -224,7 +224,7 @@ class CreditCardPaymentDialog(QDialog):
         btn_close.setFixedSize(120, 40)
         btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_close.setStyleSheet("""
-            QPushButton { background-color: #455A64; color: white; font-weight: bold; border-radius: 4px; }
+            QPushButton { background-color: #455A64; color: white; font-weight: bold; border-radius: 4px; font-size: 14pt; }
             QPushButton:hover { background-color: #37474F; }
         """)
         btn_close.clicked.connect(self.reject)
@@ -233,7 +233,7 @@ class CreditCardPaymentDialog(QDialog):
         btn_confirm.setFixedSize(100, 40)
         btn_confirm.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_confirm.setStyleSheet("""
-            QPushButton { background-color: #424242; color: white; font-weight: bold; border-radius: 4px; }
+            QPushButton { background-color: #424242; color: white; font-weight: bold; border-radius: 4px; font-size: 14pt; }
             QPushButton:hover { background-color: #212121; }
         """)
         btn_confirm.clicked.connect(self.process_payment)
@@ -268,21 +268,31 @@ class CreditCardPaymentDialog(QDialog):
 
     def process_payment(self):
         card_num = self.txt_card_num.text().strip()
+        pay_amt_txt = self.txt_pay_amt.text().replace(",", "")
         
-        if not card_num.isdigit():
-            CustomMessageDialog("오류", "카드번호는 숫자로 입력해주세요.", 'warning', self).exec()
-            self.txt_card_num.setFocus()
-            return
-            
-        if len(card_num) != 12:
+        if not card_num.isdigit() or len(card_num) != 12:
             CustomMessageDialog("오류", "카드번호 12자리를 올바르게 입력해주세요.", 'warning', self).exec()
             self.txt_card_num.setFocus()
+            return
+
+        if not pay_amt_txt.isdigit() or int(pay_amt_txt) <= 0:
+            CustomMessageDialog("오류", "올바른 결제 금액을 입력해주세요.", 'warning', self).exec()
+            self.txt_pay_amt.setFocus()
+            return
+            
+        amt = int(pay_amt_txt)
+        if amt > self.total_amount:
+            CustomMessageDialog("오류", "결제 금액이 대상 금액보다 큽니다.", 'warning', self).exec()
+            self.txt_pay_amt.setFocus()
             return
 
         self.accept()
 
     def get_card_number(self):
         return self.txt_card_num.text().strip()
+        
+    def get_payment_amount(self):
+        return int(self.txt_pay_amt.text().replace(",", ""))
 
 class CashPaymentDialog(QDialog):
     def __init__(self, total_amount, parent=None):
@@ -317,18 +327,24 @@ class CashPaymentDialog(QDialog):
         
         # Header
         header = QFrame()
-        header.setStyleSheet("background-color: #546E7A; border-bottom: 1px solid #455A64;") # Dark gray/blue for cash
-        header.setFixedHeight(50)
+        header.setStyleSheet("""
+            background-color: #546E7A; 
+            border: none;
+        """)
+        header.setFixedHeight(40)
         hbox = QHBoxLayout(header)
-        hbox.setContentsMargins(15, 0, 15, 0)
+        hbox.setContentsMargins(10, 0, 10, 0)
         
         title = QLabel("현금결제")
-        title.setStyleSheet("color: white; font-weight: bold; font-size: 14pt;")
+        title.setStyleSheet("color: white; font-weight: bold; font-size: 11pt;")
         
         btn_close = QPushButton("X")
         btn_close.setFixedSize(30, 30)
         btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_close.setStyleSheet("color: white; background: transparent; font-weight: bold; border: none; font-size: 14pt;")
+        btn_close.setStyleSheet("""
+            QPushButton { color: white; background: transparent; font-weight: bold; border: none; font-size: 12pt; }
+            QPushButton:hover { background-color: rgba(255, 255, 255, 0.2); }
+        """)
         btn_close.clicked.connect(self.reject)
         
         hbox.addWidget(title)
@@ -406,25 +422,39 @@ class CashPaymentDialog(QDialog):
         vbox.addLayout(btn_layout)
         vbox.addStretch()
         
-        # Footer Button
-        btn_confirm = QPushButton("확인")
-        btn_confirm.setFixedHeight(60)
-        btn_confirm.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_confirm.setStyleSheet("""
-            QPushButton {
-                background-color: #455A64;
-                color: white;
-                font-size: 16pt;
-                font-weight: bold;
-                border-radius: 5px;
-            }
+        layout.addWidget(content)
+        
+        # Footer
+        footer = QFrame()
+        footer.setStyleSheet("background-color: #E0E0E0;")
+        footer.setFixedHeight(60)
+        
+        hbox_foot = QHBoxLayout(footer)
+        hbox_foot.setContentsMargins(10, 10, 10, 10)
+        hbox_foot.addStretch()
+        
+        btn_close_f = QPushButton("닫기 [CLEAR]")
+        btn_close_f.setFixedSize(120, 40)
+        btn_close_f.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close_f.setStyleSheet("""
+            QPushButton { background-color: #455A64; color: white; font-weight: bold; border-radius: 4px; font-size: 14pt; }
             QPushButton:hover { background-color: #37474F; }
         """)
-        btn_confirm.clicked.connect(self.process_payment)
+        btn_close_f.clicked.connect(self.reject)
         
-        vbox.addWidget(btn_confirm, alignment=Qt.AlignmentFlag.AlignRight)
+        btn_confirm_f = QPushButton("확인")
+        btn_confirm_f.setFixedSize(100, 40)
+        btn_confirm_f.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_confirm_f.setStyleSheet("""
+            QPushButton { background-color: #424242; color: white; font-weight: bold; border-radius: 4px; font-size: 14pt; }
+            QPushButton:hover { background-color: #212121; }
+        """)
+        btn_confirm_f.clicked.connect(self.process_payment)
         
-        layout.addWidget(content)
+        hbox_foot.addWidget(btn_close_f)
+        hbox_foot.addWidget(btn_confirm_f)
+        
+        layout.addWidget(footer)
         
     def add_amount(self, amount):
         current_text = self.txt_received.text().replace(",", "")
@@ -434,17 +464,15 @@ class CashPaymentDialog(QDialog):
         
     def process_payment(self):
         txt = self.txt_received.text().replace(",", "")
-        if not txt.isdigit():
+        if not txt.isdigit() or int(txt) <= 0:
             CustomMessageDialog("오류", "올바른 금액을 입력해주세요.", 'warning', self).exec()
             self.txt_received.clear()
             self.txt_received.setFocus()
             return
 
         received = int(txt)
-        if received < self.total_amount:
-             CustomMessageDialog("오류", "받은 금액이 결제 금액보다 적습니다.", 'warning', self).exec()
-             self.txt_received.setFocus()
-             return
+        # We now allow partial payments (received < self.total_amount)
+        # The logic in main.py will handle tracking total paid amount
              
         self.received_amount = received
         self.accept()
@@ -486,18 +514,24 @@ class CashReceiptDialog(QDialog):
         
         # Header
         header = QFrame()
-        header.setStyleSheet("background-color: #546E7A; border-bottom: 1px solid #455A64;")
-        header.setFixedHeight(50)
+        header.setStyleSheet("""
+            background-color: #546E7A; 
+            border: none;
+        """)
+        header.setFixedHeight(40)
         hbox = QHBoxLayout(header)
-        hbox.setContentsMargins(15, 0, 15, 0)
+        hbox.setContentsMargins(10, 0, 10, 0)
         
         title = QLabel("현금영수증")
-        title.setStyleSheet("color: white; font-weight: bold; font-size: 14pt; border: none;")
+        title.setStyleSheet("color: white; font-weight: bold; font-size: 11pt; border: none;")
         
         btn_close = QPushButton("X")
         btn_close.setFixedSize(30, 30)
         btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_close.setStyleSheet("color: white; background: transparent; font-weight: bold; border: none; font-size: 14pt;")
+        btn_close.setStyleSheet("""
+            QPushButton { color: white; background: transparent; font-weight: bold; border: none; font-size: 12pt; }
+            QPushButton:hover { background-color: rgba(255, 255, 255, 0.2); }
+        """)
         btn_close.clicked.connect(self.reject)
         
         hbox.addWidget(title)

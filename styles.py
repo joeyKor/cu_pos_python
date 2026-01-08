@@ -34,27 +34,33 @@ MAIN_WINDOW_STYLE = f"""
 
 TABLE_STYLE = f"""
     QTableWidget {{
-        background-color: {WHITE};
+        background-color: #F2F4F6;
         color: {TEXT_COLOR};
         border: none;
-        gridline-color: {BORDER_COLOR};
+        gridline-color: #DEE2E6;
         font-family: '{FONT_FAMILY}';
-        font-size: 16pt;
+        font-size: 20pt;
         selection-background-color: #D1C4E9;
         selection-color: {TEXT_COLOR};
+    }}
+    QTableWidget::item {{
+        border-bottom: 1px solid #DEE2E6;
+        padding-top: 5px;
+        padding-bottom: 5px;
     }}
     QTableWidget::item:selected {{
         background-color: #D1C4E9;
         color: {TEXT_COLOR};
     }}
     QHeaderView::section {{
-        background-color: #F8F9FA;
-        color: {TEXT_COLOR};
+        background-color: #D1D5DB;
+        color: #333;
         padding: 8px;
         border: none;
-        border-bottom: 2px solid {PRIMARY_PURPLE};
+        border-right: 1px solid #99A1AC;
+        border-bottom: 1px solid #99A1AC;
         font-family: '{FONT_FAMILY}';
-        font-size: 15pt;
+        font-size: 18pt;
         font-weight: bold;
     }}
 """
@@ -266,3 +272,60 @@ WELCOME_QUICK_ITEM_FRAME = """
 
 WELCOME_PRICE_LABEL = "color: #D32F2F; font-weight: bold; font-size: 10pt;"
 WELCOME_ITEM_NAME_LABEL = "color: #333333; font-weight: bold; font-size: 9pt;"
+
+# Payment Summary Meticulous Styles
+SUMMARY_LABEL_STYLE = "font-family: 'Malgun Gothic'; font-size: 16pt; color: #444; font-weight: bold;"
+SUMMARY_TOTAL_RED = "font-family: 'Malgun Gothic'; font-size: 34pt; color: #D32F2F; font-weight: bold;"
+SUMMARY_TOTAL_DARK = "font-family: 'Malgun Gothic'; font-size: 20pt; color: #333; font-weight: bold;"
+SUMMARY_UNIT = "font-family: 'Malgun Gothic'; font-size: 14pt; color: #666; font-weight: bold; padding-left: 5px; margin-bottom: 5px;"
+
+SUMMARY_CONTAINER_STYLE = "background-color: #F8F9FA; border: none;"
+BARCODE_INPUT_STYLE = """
+    QLineEdit {
+        background-color: white;
+        border: 2px solid #DEDEDE;
+        border-radius: 4px;
+        padding: 10px;
+        font-family: 'Malgun Gothic';
+        font-size: 20pt;
+        color: #333;
+    }
+    QLineEdit:focus {
+        border: 2px solid #7B68EE;
+    }
+"""
+
+SCROLLBAR_STYLE = """
+    QScrollBar:vertical {
+        border: none;
+        background: #F1F1F1;
+        width: 14px;
+        margin: 0px 0px 0px 0px;
+    }
+    QScrollBar::handle:vertical {
+        background: #C1C1C1;
+        min-height: 30px;
+        border-radius: 7px;
+        margin: 2px;
+    }
+    QScrollBar::handle:vertical:hover {
+        background: #A1A1A1;
+    }
+    QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+        height: 0px;
+    }
+"""
+
+WELCOME_SCROLL_BUTTON_STYLE = """
+    QPushButton {
+        background-color: #00A6ED; /* RGB(0, 166, 237) */
+        color: white;
+        border: 1px solid #0084BD;
+        font-family: 'Malgun Gothic';
+        font-size: 16pt;
+        font-weight: bold;
+    }
+    QPushButton:pressed {
+        background-color: #0084BD;
+    }
+"""

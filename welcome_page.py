@@ -40,7 +40,7 @@ class WelcomePage(QWidget):
         # Universal White background to eliminate color mismatches
         header_frame.setStyleSheet("background-color: white; border: none;")
         
-        base_path = r"C:\Users\joy\.gemini\antigravity\brain\eeed31fe-3ea1-4e4b-86a1-382a798d07a3"
+        base_path = "assets"
         store_img = os.path.join(base_path, "cu_store_recreated_v1_1767798621656.png")
         mascot_img = os.path.join(base_path, "cu_mascot_fullbody_white_background_1767715363864.png")
 

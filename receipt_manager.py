@@ -141,40 +141,59 @@ class ReceiptManager:
             </tr>
             """
 
-        # Payment Specifics
+        # Payment Specifics - Loop through all payments
+        payments = transaction_data.get("payments", [])
         payment_info_html = ""
-        if payment_method == "Card":
-            card_num = payment_details.get("card_number", "4854-79**-****-0348")
-            if len(card_num) == 12:
-                card_num = f"{card_num[:4]}-{card_num[4:6]}**-****-{card_num[10:]}"
-            payment_info_html = f"""
-            <tr><td colspan="3" style="border-top: 1px dashed #000; padding: 5px 0 0 0;"></td></tr>
-            <tr>
-                <td class="bold">신 용 카 드</td>
-                <td colspan="2" class="col-amt bold">{total_amt:,}</td>
-            </tr>
-            <tr><td colspan="3" class="center">********* 신 용 카 드 *********</td></tr>
-            <tr><td colspan="3">카드번호: {card_num}</td></tr>
-            <tr><td colspan="3">승인번호: {datetime.datetime.now().strftime("%H%M%S%f")[:8]}</td></tr>
-            <tr>
-                <td>결제금액:</td>
-                <td colspan="2" class="col-amt">{total_amt:,}</td>
-            </tr>
-            """
-        else: # Cash
-            receipt_id = payment_details.get("receipt_id", "")
-            payment_info_html = f"""
-            <tr><td colspan="3" style="border-top: 1px dashed #000; padding: 5px 0 0 0;"></td></tr>
-            <tr>
-                <td class="bold">현 금</td>
-                <td colspan="2" class="col-amt bold">{received_amt:,}</td>
-            </tr>
-            <tr>
-                <td>거스름돈:</td>
-                <td colspan="2" class="col-amt">{change_amt:,}</td>
-            </tr>
-            {"<tr><td colspan='3'>현금영수증: " + receipt_id + "</td></tr>" if receipt_id else ""}
-            """
+        
+        # Fallback for old transactions without payments list
+        if not payments:
+            if payment_method == "Card":
+                payments = [{"method": "Card", "amount": total_amt, "details": payment_details}]
+            else:
+                payments = [{"method": "Cash", "amount": total_amt, "details": {"received_amt": received_amt, "change_amt": change_amt, "receipt_id": payment_details.get("receipt_id", "")}}]
+
+        for i, p in enumerate(payments):
+            method = p.get("method")
+            amt = p.get("amount", 0)
+            details = p.get("details", {})
+            
+            if i > 0:
+                payment_info_html += '<tr><td colspan="3" class="dashed-line" style="padding: 2px 0;"></td></tr>'
+            else:
+                payment_info_html += '<tr><td colspan="3" style="border-top: 1px dashed #000; padding: 5px 0 0 0;"></td></tr>'
+
+            if method == "Card":
+                card_num = details.get("card_number", "****-****-****-****")
+                if len(card_num) == 12:
+                    card_num = f"{card_num[:4]}-{card_num[4:6]}**-****-{card_num[10:]}"
+                payment_info_html += f"""
+                <tr>
+                    <td class="bold">신 용 카 드</td>
+                    <td colspan="2" class="col-amt bold">{amt:,}</td>
+                </tr>
+                <tr><td colspan="3" class="center">********* 신 용 카 드 *********</td></tr>
+                <tr><td colspan="3">카드번호: {card_num}</td></tr>
+                <tr><td colspan="3">승인번호: {datetime.datetime.now().strftime("%H%M%S%f")[:8]}</td></tr>
+                """
+            else: # Cash
+                recv = details.get("received_amt", amt)
+                chg = details.get("change_amt", 0)
+                rid = details.get("receipt_id", "")
+                payment_info_html += f"""
+                <tr>
+                    <td class="bold">현 금</td>
+                    <td colspan="2" class="col-amt bold">{amt:,}</td>
+                </tr>
+                <tr>
+                    <td>받은금액:</td>
+                    <td colspan="2" class="col-amt">{recv:,}</td>
+                </tr>
+                <tr>
+                    <td>거스름돈:</td>
+                    <td colspan="2" class="col-amt">{chg:,}</td>
+                </tr>
+                {"<tr><td colspan='3'>현금영수증: " + rid + "</td></tr>" if rid else ""}
+                """
 
         # Barcode Logic
         tx_barcode = transaction_data.get("tx_barcode", "92019072427083018679")
@@ -212,7 +231,7 @@ class ReceiptManager:
                 {self.owner} TEL: {self.tel}
             </div>
             <div style="margin: 8px 0; font-size: 8pt; line-height: 1.3;">
-                정부 방침에 의해 12년 7월 1일부터 현금 결제 취소시, 영수증이 없으면 교환/환불이 불가합니다.
+                영수증이 없으면 교환/환불이 불가합니다.
             </div>
             <div>
                 {timestamp} &nbsp; POS-01
@@ -262,8 +281,7 @@ class ReceiptManager:
                     <tr>
                         <td colspan="3" class="center" style="font-size: 8pt;">
                             *표시 상품은 부가세 면세 품목 임.<br>
-                            환불:30일내 영수증/카드지참시 가능<br>
-                            객층:12 담당:이유숙 NO:8679 04:07
+                            환불:30일내 영수증/카드지참시 가능
                         </td>
                     </tr>
                     

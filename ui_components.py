@@ -6,10 +6,50 @@ from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
 import styles
 
 class ActionButton(QPushButton):
-    def __init__(self, text, style_sheet, parent=None):
-        super().__init__(text, parent)
+    def __init__(self, text, style_sheet, icon_char=None, parent=None):
+        super().__init__("", parent)
         self.setStyleSheet(style_sheet)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(15, 0, 15, 0)
+        layout.setSpacing(10)
+        
+        self.original_icon_char = icon_char
+        if icon_char:
+            self.icon_label = QLabel(icon_char)
+            self.icon_label.setFixedSize(36, 36) # Slightly larger icon container
+            self.icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.icon_label.setStyleSheet("background-color: rgba(255, 255, 255, 0.2); border-radius: 18px; color: white; border: 1px solid white; font-size: 14pt; font-weight: bold;")
+            layout.addWidget(self.icon_label)
+        else:
+            self.icon_label = None
+        
+        self.text_label = QLabel(text)
+        self.text_label.setStyleSheet(f"color: white; font-weight: bold; border: none; background: transparent; font-size: {styles.FONT_SIZE_LARGE}; font-family: '{styles.FONT_FAMILY}';")
+        self.text_label.setWordWrap(True)
+        self.text_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.text_label, 1)
+        
+        # Add a small spacer at the end to balance the icon's presence if it exists
+        if icon_char:
+            layout.addSpacing(10)
+        
+        # Make the button textually recognizable for accessibility or simple lookups
+        self.setObjectName(text)
+        self.is_checked = False
+
+    def set_checked(self, checked):
+        if not hasattr(self, 'icon_label') or not self.icon_label:
+            return
+
+        self.is_checked = checked
+        if checked:
+            self.icon_label.setText("✔")
+            self.icon_label.setStyleSheet("background-color: #FBC02D; border-radius: 18px; color: #333; border: 1px solid #FBC02D; font-size: 16pt; font-weight: bold;")
+        else:
+            self.icon_label.setText(self.original_icon_char if self.original_icon_char else "")
+            self.icon_label.setStyleSheet("background-color: rgba(255, 255, 255, 0.2); border-radius: 18px; color: white; border: 1px solid white; font-size: 14pt; font-weight: bold;")
 
 class StatusLabel(QLabel):
     def __init__(self, text, parent=None):
@@ -195,13 +235,13 @@ class CustomMessageDialog(QDialog):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(400, 250)
+        self.setFixedSize(500, 320)
         
         self.result_value = False
         
         # Main Container with rounding and shadow
         self.container = QFrame(self)
-        self.container.setGeometry(10, 10, 380, 230)
+        self.container.setGeometry(10, 10, 480, 300)
         self.container.setStyleSheet(f"""
             QFrame {{
                 background-color: {styles.WHITE};

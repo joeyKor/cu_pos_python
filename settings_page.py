@@ -43,6 +43,7 @@ class SettingsPage(QWidget):
         
         # Load Data
         self.load_data()
+        self.clear_form()
 
     def create_header(self):
         header_frame = QFrame()
@@ -77,10 +78,16 @@ class SettingsPage(QWidget):
         
         # Resize modes
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch) # Name stretches
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        self.table.setColumnWidth(0, 280) # Much wider Barcode
+        self.table.setColumnWidth(2, 100) # Price
+        self.table.setColumnWidth(3, 120) # Category
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch) # Name takes remaining (narrower)
         
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.table.verticalHeader().setVisible(False)
         self.table.cellClicked.connect(self.on_table_click)
         
@@ -99,8 +106,20 @@ class SettingsPage(QWidget):
         lbl_form.setStyleSheet(f"font-size: {styles.FONT_SIZE_LARGE}; font-weight: bold; color: {styles.TEXT_COLOR}; margin-bottom: 20px;")
         right_layout.addWidget(lbl_form)
         
-        # Form Fields
-        lbl_barcode, self.input_barcode = self.create_input_field("바코드 (13자리 숫자)")
+        # Barcode with Counter
+        barcode_header_layout = QHBoxLayout()
+        lbl_barcode = QLabel("바코드 (13자리 숫자)")
+        lbl_barcode.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; color: {styles.TEXT_COLOR}; margin-top: 10px;")
+        self.lbl_barcode_counter = QLabel("(0 / 13)")
+        self.lbl_barcode_counter.setStyleSheet(f"font-size: {styles.FONT_SIZE_SMALL}; color: {styles.PRIMARY_PURPLE}; margin-top: 10px; font-weight: bold;")
+        barcode_header_layout.addWidget(lbl_barcode)
+        barcode_header_layout.addStretch()
+        barcode_header_layout.addWidget(self.lbl_barcode_counter)
+        
+        self.input_barcode = QLineEdit()
+        self.input_barcode.setStyleSheet(styles.INPUT_STYLE)
+        self.input_barcode.textChanged.connect(self.update_barcode_counter)
+        
         lbl_name, self.input_name = self.create_input_field("상품명")
         lbl_price, self.input_price = self.create_input_field("단가 (원)")
         
@@ -112,7 +131,7 @@ class SettingsPage(QWidget):
         self.combo_category.setEditable(True) # Allow custom categories
         self.combo_category.setStyleSheet(styles.COMBO_STYLE)
         
-        right_layout.addWidget(lbl_barcode) # Label
+        right_layout.addLayout(barcode_header_layout) # Label + Counter
         right_layout.addWidget(self.input_barcode) # Input
         right_layout.addWidget(lbl_name)
         right_layout.addWidget(self.input_name)
@@ -135,16 +154,26 @@ class SettingsPage(QWidget):
         self.btn_delete.setStyleSheet(styles.BUTTON_RED_STYLE)
         self.btn_delete.clicked.connect(self.delete_product)
         
-        self.btn_print_barcode = QPushButton("바코드 출력")
-        self.btn_print_barcode.setStyleSheet(styles.BUTTON_PURPLE_STYLE)
-        self.btn_print_barcode.clicked.connect(self.print_barcodes)
+        self.btn_print_selected = QPushButton("선택 바코드 출력")
+        self.btn_print_selected.setStyleSheet(styles.BUTTON_PURPLE_STYLE)
+        self.btn_print_selected.clicked.connect(self.print_selected_barcode)
+        
+        self.btn_print_all = QPushButton("전체 바코드 출력")
+        self.btn_print_all.setStyleSheet(styles.BUTTON_PURPLE_STYLE)
+        self.btn_print_all.clicked.connect(self.print_all_barcodes)
         
         self.btn_clear = QPushButton("초기화 (입력창)")
         self.btn_clear.setStyleSheet(styles.BUTTON_BOTTOM_STYLE.replace("font-size: 10pt", "font-size: 12pt"))
         self.btn_clear.clicked.connect(self.clear_form)
         
+        # Split print buttons horizontally
+        print_btn_layout = QHBoxLayout()
+        print_btn_layout.setSpacing(10)
+        print_btn_layout.addWidget(self.btn_print_selected)
+        print_btn_layout.addWidget(self.btn_print_all)
+        
         btn_layout.addWidget(self.btn_add)
-        btn_layout.addWidget(self.btn_print_barcode)
+        btn_layout.addLayout(print_btn_layout)
         btn_layout.addWidget(self.btn_delete)
         btn_layout.addWidget(self.btn_clear)
         
@@ -194,6 +223,7 @@ class SettingsPage(QWidget):
             row += 1
 
     def on_table_click(self, row, col):
+        self.table.selectRow(row)
         barcode = self.table.item(row, 0).text()
         product = self.product_manager.get_product(barcode)
         
@@ -204,13 +234,24 @@ class SettingsPage(QWidget):
             self.input_price.setText(str(product["price"]))
             self.combo_category.setCurrentText(product["category"])
 
+    def update_barcode_counter(self):
+        length = len(self.input_barcode.text())
+        self.lbl_barcode_counter.setText(f"({length} / 13)")
+        if length == 13:
+            self.lbl_barcode_counter.setStyleSheet(f"font-size: {styles.FONT_SIZE_SMALL}; color: {styles.ACCENT_GREEN}; margin-top: 10px; font-weight: bold;")
+        else:
+            self.lbl_barcode_counter.setStyleSheet(f"font-size: {styles.FONT_SIZE_SMALL}; color: {styles.PRIMARY_PURPLE}; margin-top: 10px; font-weight: bold;")
+
     def clear_form(self):
         self.current_editing_barcode = None # Reset
-        self.input_barcode.clear()
+        self.input_barcode.setText("8801000000")
+        self.input_barcode.setFocus()
+        self.input_barcode.setCursorPosition(10)
         self.input_name.clear()
         self.input_price.clear()
         self.combo_category.setCurrentIndex(0)
         self.table.clearSelection()
+        self.update_barcode_counter()
 
     def show_alert(self, title, message, type='info'):
         dialog = CustomMessageDialog(title, message, type, self)
@@ -238,23 +279,43 @@ class SettingsPage(QWidget):
             self.show_alert("경고", "단가는 숫자여야 합니다.", 'warning')
             return
         
-        # Handle Barcode Update (Renaming)
-        if self.current_editing_barcode and self.current_editing_barcode != barcode:
-            # User changed the barcode of an existing item
-            # Check if new barcode already exists
-            if self.product_manager.get_product(barcode):
-                self.show_alert("오류", f"이미 존재하는 바코드입니다: {barcode}\n다른 번호를 사용해주세요.", 'warning')
-                return
-            
-            # Update key preserving order
-            self.product_manager.update_product_key(self.current_editing_barcode, barcode, name, price, category)
+        # Duplicate Check
+        existing_product = self.product_manager.get_product(barcode)
+        
+        if self.current_editing_barcode:
+            # Scenario 1: Editing an existing item
+            if self.current_editing_barcode != barcode:
+                # Barcode was changed (Renaming)
+                if existing_product:
+                    # New barcode already exists on ANOTHER product
+                    msg = f"바코드 [{barcode}]는 이미 등록된 상품입니다.\n기존 상품: {existing_product['name']}\n\n이 상품 정보를 현재 입력하신 정보로 변경하시겠습니까?"
+                    if self.show_alert("중복 확인", msg, 'question'):
+                        # Remove the original product being edited and overwrite the target barcode
+                        self.product_manager.delete_product(self.current_editing_barcode)
+                        self.product_manager.add_product(barcode, name, price, category)
+                    else:
+                        return
+                else:
+                    # Normal rename (barcode changed to a new unique one)
+                    self.product_manager.update_product_key(self.current_editing_barcode, barcode, name, price, category)
+            else:
+                # Barcode didn't change, just update details
+                self.product_manager.add_product(barcode, name, price, category)
         else:
-            # New product or same barcode
-            self.product_manager.add_product(barcode, name, price, category)
+            # Scenario 2: Adding a completely new product (or duplicate on enter)
+            if existing_product:
+                msg = f"바코드 [{barcode}]는 이미 등록된 상품입니다.\n기존 상품: {existing_product['name']}\n\n이 상품 정보를 현재 입력하신 정보로 변경하시겠습니까?"
+                if self.show_alert("중복 확인", msg, 'question'):
+                    self.product_manager.add_product(barcode, name, price, category)
+                else:
+                    return
+            else:
+                # Normal new addition
+                self.product_manager.add_product(barcode, name, price, category)
 
         self.load_data()
         self.clear_form()
-        self.show_alert("완료", "상품이 저장되었습니다.", 'info')
+        self.show_alert("완료", "상품 정보가 저장되었습니다.", 'info')
 
     def delete_product(self):
         current_row = self.table.currentRow()
@@ -269,39 +330,28 @@ class SettingsPage(QWidget):
             self.load_data()
             self.clear_form()
 
-    def print_barcodes(self):
-        barcode = self.input_barcode.text().strip()
-        name = self.input_name.text().strip()
-        price_str = self.input_price.text().strip()
-        
-        if not barcode or not name or not price_str:
-            self.show_alert("경고", "출력할 상품을 선택하거나 정보를 입력해주세요.", 'warning')
-            return
-            
-        try:
-            price = int(price_str.replace(",", ""))
-        except ValueError:
-            self.show_alert("경고", "단가는 숫자여야 합니다.", 'warning')
-            return
-
+    def generate_barcode_html(self, item_list):
+        # item_list: list of (barcode, name, price)
         from ui_components import ReceiptPreviewDialog
         
-        barcode_img = self.receipt_manager.generate_barcode_base64(barcode)
-        
-        # Create 6x3 grid HTML using a <table> for a clear table structure
         table_rows = ""
-        for row in range(6):
+        for i in range(0, len(item_list), 3):
             table_rows += "<tr>"
-            for col in range(3):
-                table_rows += f"""
-                <td class="label-box">
-                    <div class="p-name">{name}</div>
-                    <div class="p-price">{price:,}원</div>
-                    <div class="p-barcode">
-                        <img src="{barcode_img}" width="120" height="40">
-                    </div>
-                </td>
-                """
+            for j in range(3):
+                if i + j < len(item_list):
+                    barcode, name, price = item_list[i + j]
+                    barcode_img = self.receipt_manager.generate_barcode_base64(barcode)
+                    table_rows += f"""
+                    <td class="label-box">
+                        <div class="p-name">{name}</div>
+                        <div class="p-price">{price:,}원</div>
+                        <div class="p-barcode">
+                            <img src="{barcode_img}" width="120" height="40">
+                        </div>
+                    </td>
+                    """
+                else:
+                    table_rows += '<td class="label-box" style="border:none;"></td>'
             table_rows += "</tr>"
             
         html = f"""
@@ -332,7 +382,44 @@ class SettingsPage(QWidget):
         </body>
         </html>
         """
+        return html
+
+    def print_selected_barcode(self):
+        barcode = self.input_barcode.text().strip()
+        name = self.input_name.text().strip()
+        price_str = self.input_price.text().strip()
         
+        if not barcode or not name or not price_str:
+            self.show_alert("경고", "출력할 상품을 선택하거나 정보를 입력해주세요.", 'warning')
+            return
+            
+        try:
+            price = int(price_str.replace(",", ""))
+        except ValueError:
+            self.show_alert("경고", "단가는 숫자여야 합니다.", 'warning')
+            return
+
+        items = [(barcode, name, price)] * 18
+        html = self.generate_barcode_html(items)
+        
+        from ui_components import ReceiptPreviewDialog
         dialog = ReceiptPreviewDialog(html, self)
-        dialog.setFixedSize(450, 750) # Make it taller for the grid
+        dialog.setFixedSize(450, 750)
+        dialog.exec()
+
+    def print_all_barcodes(self):
+        products = self.product_manager.get_all_products()
+        if not products:
+            self.show_alert("알림", "등록된 상품이 없습니다.", 'info')
+            return
+            
+        items = []
+        for barcode, data in products.items():
+            items.append((barcode, data["name"], data["price"]))
+            
+        html = self.generate_barcode_html(items)
+        
+        from ui_components import ReceiptPreviewDialog
+        dialog = ReceiptPreviewDialog(html, self)
+        dialog.setFixedSize(450, 750)
         dialog.exec()

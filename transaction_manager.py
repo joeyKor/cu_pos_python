@@ -17,13 +17,14 @@ class TransactionManager:
             with open(self.config_path, 'w', encoding='utf-8') as f:
                 json.dump({"safe_base_amt": 472000}, f)
 
-    def save_transaction(self, items, total_amt, payment_method, received_amt=None, change_amt=0, payment_details=None, tx_barcode=None):
+    def save_transaction(self, items, total_amt, payment_method, received_amt=None, change_amt=0, payments=None, payment_details=None, tx_barcode=None):
         transaction = {
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "tx_barcode": tx_barcode,
             "items": items,
             "total_amt": total_amt,
             "payment_method": payment_method,
+            "payments": payments or [], # Store full list of payments
             "received_amt": received_amt if received_amt is not None else total_amt,
             "change_amt": change_amt,
             "payment_details": payment_details or {}

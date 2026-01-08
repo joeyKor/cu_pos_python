@@ -32,6 +32,8 @@ class POSMainWindow(QMainWindow):
         self.rm = self.receipt_manager
         self.wait_slots = [None, None, None]
         self.current_wait_index = -1
+        self.total_paid = 0
+        self.payments = []
         
         self.init_ui()
 
@@ -197,17 +199,31 @@ class POSMainWindow(QMainWindow):
         return header_frame
 
     def create_left_panel(self):
-        left_layout = QVBoxLayout()
+        # Outer Layout for Table + Footer + Scroll Buttons
+        main_table_layout = QHBoxLayout()
+        main_table_layout.setSpacing(0)
         
+        # Left side: Table + Footer
+        table_footer_column = QVBoxLayout()
+        table_footer_column.setSpacing(0)
+
         # Product Table
         self.table = QTableWidget()
+        self.table.setFixedHeight(550) # Increase vertical size as requested
         self.table.setColumnCount(6)
         self.table.setHorizontalHeaderLabels(["NO", "상품명", "수량", "단가", "금액", "할인"])
-        self.table.setStyleSheet(styles.TABLE_STYLE)
+        self.table.setStyleSheet(styles.TABLE_STYLE + styles.SCROLLBAR_STYLE)
+        self.table.verticalScrollBar().setFixedWidth(0) # Hide the actual bar but keep logic
         
         # Table Header Config
         header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(0, 50)   # NO
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch) # Product Name stretches
+        self.table.setColumnWidth(2, 80)   # Qty
+        self.table.setColumnWidth(3, 150)  # Unit Price
+        self.table.setColumnWidth(4, 150)  # Amount
+        self.table.setColumnWidth(5, 120)  # Discount
         
         # Remove grid lines/Selection behavior
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -218,101 +234,203 @@ class POSMainWindow(QMainWindow):
         # Connect Click Event
         self.table.cellClicked.connect(self.open_edit_dialog)
         
-        left_layout.addWidget(self.table)
+        table_footer_column.addWidget(self.table)
+        
+        # === Table Footer (Totals Row) ===
+        footer_frame = QFrame()
+        footer_frame.setFixedHeight(50)
+        footer_frame.setStyleSheet("background-color: #D1D5DB; border-top: 1px solid #99A1AC;")
+        footer_layout = QHBoxLayout(footer_frame)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+        footer_layout.setSpacing(0)
+        
+        lbl_foot_title_box = QLabel("합계")
+        lbl_foot_title_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_foot_title_box.setStyleSheet("font-weight: bold; font-size: 20pt; color: #333;")
+        footer_layout.addWidget(lbl_foot_title_box, stretch=1) # NO + Product Name
+        
+        self.lbl_foot_qty = QLabel("0")
+        self.lbl_foot_qty.setFixedWidth(80)
+        self.lbl_foot_qty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_foot_qty.setStyleSheet("font-weight: bold; font-size: 20pt; color: #333;")
+        footer_layout.addWidget(self.lbl_foot_qty)
+        
+        self.lbl_foot_price = QLabel("") # Unit price sum usually not shown or 0
+        self.lbl_foot_price.setFixedWidth(150)
+        self.lbl_foot_price.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.lbl_foot_price.setStyleSheet("font-weight: bold; font-size: 20pt; color: #333; padding-right: 15px;")
+        footer_layout.addWidget(self.lbl_foot_price)
+        
+        self.lbl_foot_amt = QLabel("0")
+        self.lbl_foot_amt.setFixedWidth(150)
+        self.lbl_foot_amt.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.lbl_foot_amt.setStyleSheet("font-weight: bold; font-size: 20pt; color: #333; padding-right: 15px;")
+        footer_layout.addWidget(self.lbl_foot_amt)
+        
+        self.lbl_foot_disc = QLabel("0")
+        self.lbl_foot_disc.setFixedWidth(120)
+        self.lbl_foot_disc.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.lbl_foot_disc.setStyleSheet("font-weight: bold; font-size: 20pt; color: #D32F2F; padding-right: 15px;")
+        footer_layout.addWidget(self.lbl_foot_disc)
+        
+        table_footer_column.addWidget(footer_frame)
+        
+        main_table_layout.addLayout(table_footer_column)
+        
+        # Custom Scroll Button Panel
+        scroll_panel = QVBoxLayout()
+        scroll_panel.setSpacing(1)
+        
+        btn_top = QPushButton("⏫")
+        btn_up = QPushButton("🔼")
+        btn_down = QPushButton("🔽")
+        btn_bottom = QPushButton("⏬")
+        
+        for btn in [btn_top, btn_up, btn_down, btn_bottom]:
+            btn.setFixedSize(60, 150) # Total height is 550(table)+50(footer)=600. 600/4 = 150
+            btn.setStyleSheet(styles.WELCOME_SCROLL_BUTTON_STYLE)
+            scroll_panel.addWidget(btn)
+        
+        btn_top.clicked.connect(lambda: self.table.verticalScrollBar().setValue(0))
+        btn_up.clicked.connect(lambda: self.table.verticalScrollBar().setValue(self.table.verticalScrollBar().value() - 30))
+        btn_down.clicked.connect(lambda: self.table.verticalScrollBar().setValue(self.table.verticalScrollBar().value() + 30))
+        btn_bottom.clicked.connect(lambda: self.table.verticalScrollBar().setValue(self.table.verticalScrollBar().maximum()))
+        
+        main_table_layout.addLayout(scroll_panel)
+        
+        left_layout = QVBoxLayout() # The final panel layout
+        left_layout.addLayout(main_table_layout)
         
         # Total Summary & Input Area
         summary_widget = QWidget()
-        summary_widget.setStyleSheet(f"background-color: {styles.GRAY_BG};")
-        summary_layout = QVBoxLayout(summary_widget)
-        summary_layout.setContentsMargins(0, 10, 0, 0)
-
-        # Totals Row (Total items, Total Amt, Discount) - This is a bit complex in the image
-        # Simplified for now:
-        totals_row = QHBoxLayout()
+        summary_widget.setStyleSheet(styles.SUMMARY_CONTAINER_STYLE)
+        summary_layout = QHBoxLayout(summary_widget)
+        summary_layout.setContentsMargins(20, 15, 20, 15)
+        summary_layout.setSpacing(15)
         
-        self.lbl_total_qty = QLabel("합계   0")
-        self.lbl_total_amt = QLabel("0")
-        self.lbl_discount = QLabel("0")
+        # --- Left Side: Barcode Input ---
+        barcode_container = QVBoxLayout()
+        barcode_container.setContentsMargins(0, 0, 0, 0)
         
-        # Style them
-        base_style = f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR};"
-        self.lbl_total_qty.setStyleSheet(base_style)
-        self.lbl_total_amt.setStyleSheet(base_style)
-        self.lbl_discount.setStyleSheet(base_style + "color: #E57373;")
-
-        totals_row.addWidget(self.lbl_total_qty)
-        totals_row.addStretch()
-        totals_row.addWidget(self.lbl_total_amt)
-        totals_row.addSpacing(20)
-        totals_row.addWidget(self.lbl_discount)
-        
-        summary_layout.addLayout(totals_row)
-        
-        # Input and Big Total Row
-        bottom_summary_layout = QHBoxLayout()
-        
-        # Input Box
         self.input_barcode = QLineEdit()
-        self.input_barcode.setPlaceholderText("Scan barcode here...")
-        self.input_barcode.setStyleSheet(f"border: none; border-bottom: 3px solid {styles.PRIMARY_PURPLE}; padding: 10px; font-size: {styles.FONT_SIZE_LARGE}; background-color: {styles.WHITE}; color: {styles.TEXT_COLOR};")
-        self.input_barcode.setFixedHeight(50)
+        self.input_barcode.setPlaceholderText("상품의 바코드를 스캔하세요...")
+        self.input_barcode.setStyleSheet(styles.BARCODE_INPUT_STYLE)
+        self.input_barcode.setFixedHeight(70)
         self.input_barcode.returnPressed.connect(self.handle_barcode_input)
         self.input_barcode.textChanged.connect(self.on_barcode_text_changed)
         
-        # Payment Info
-        pay_info_layout = QGridLayout()
-        lbl_to_receive = QLabel("받을 금액")
-        lbl_to_receive.setStyleSheet(f"font-size: {styles.FONT_SIZE_LARGE}; font-weight: bold; color: {styles.TEXT_COLOR};")
+        barcode_container.addStretch()
+        barcode_container.addWidget(self.input_barcode)
+        barcode_container.addStretch()
         
-        self.lbl_final_price = QLabel("0 원")
-        self.lbl_final_price.setStyleSheet(styles.BIG_PRICE_STYLE)
+        summary_layout.addLayout(barcode_container, stretch=3)
         
-        lbl_received = QLabel("결제한 금액    0 원")
-        lbl_change = QLabel("거스름돈        0 원")
-        lbl_received.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; color: {styles.TEXT_COLOR};")
-        lbl_change.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; color: {styles.TEXT_COLOR};")
-
-        pay_info_layout.addWidget(lbl_to_receive, 0, 0)
+        # v_divider removed
+        
+        # --- Right Side: Payment Info ---
+        pay_info_group = QWidget()
+        pay_info_layout = QGridLayout(pay_info_group)
+        pay_info_layout.setContentsMargins(10, 0, 0, 0)
+        pay_info_layout.setSpacing(5) # Reduced spacing
+        pay_info_layout.setVerticalSpacing(2) # Reduced line spacing
+        
+        # Row 0: 받을 금액 (Red Highlight)
+        lbl_receive_title = QLabel("받을 금액")
+        lbl_receive_title.setStyleSheet(styles.SUMMARY_LABEL_STYLE)
+        
+        self.lbl_final_price = QLabel("0")
+        self.lbl_final_price.setStyleSheet(styles.SUMMARY_TOTAL_RED)
+        
+        lbl_unit_1 = QLabel("원")
+        lbl_unit_1.setStyleSheet(styles.SUMMARY_UNIT)
+        lbl_unit_1.setAlignment(Qt.AlignmentFlag.AlignBottom)
+        
+        pay_info_layout.addWidget(lbl_receive_title, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
         pay_info_layout.addWidget(self.lbl_final_price, 0, 1, alignment=Qt.AlignmentFlag.AlignRight)
+        pay_info_layout.addWidget(lbl_unit_1, 0, 2, alignment=Qt.AlignmentFlag.AlignBottom)
         
-        pay_info_layout.addWidget(lbl_received, 1, 0, 1, 2, alignment=Qt.AlignmentFlag.AlignRight)
-        pay_info_layout.addWidget(lbl_change, 2, 0, 1, 2, alignment=Qt.AlignmentFlag.AlignRight)
-
-        bottom_summary_layout.addWidget(self.input_barcode, stretch=1)
-        bottom_summary_layout.addLayout(pay_info_layout, stretch=1)
+        # h_divider removed
         
-        summary_layout.addLayout(bottom_summary_layout)
+        # Row 2: 결제한 금액
+        lbl_paid_title = QLabel("결제한 금액")
+        lbl_paid_title.setStyleSheet(styles.SUMMARY_LABEL_STYLE)
+        
+        self.lbl_received_amount = QLabel("0") # Renamed for clarity, logic needs check
+        self.lbl_received_amount.setStyleSheet(styles.SUMMARY_TOTAL_DARK)
+        
+        lbl_unit_2 = QLabel("원")
+        lbl_unit_2.setStyleSheet(styles.SUMMARY_UNIT)
+        lbl_unit_2.setAlignment(Qt.AlignmentFlag.AlignBottom)
+        
+        pay_info_layout.addWidget(lbl_paid_title, 2, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        pay_info_layout.addWidget(self.lbl_received_amount, 2, 1, alignment=Qt.AlignmentFlag.AlignRight)
+        pay_info_layout.addWidget(lbl_unit_2, 2, 2, alignment=Qt.AlignmentFlag.AlignBottom)
+        
+        # Row 3: 거스름돈
+        lbl_change_title = QLabel("거스름돈")
+        lbl_change_title.setStyleSheet(styles.SUMMARY_LABEL_STYLE)
+        
+        self.lbl_change_amount = QLabel("0")
+        self.lbl_change_amount.setStyleSheet(styles.SUMMARY_TOTAL_DARK)
+        
+        lbl_unit_3 = QLabel("원")
+        lbl_unit_3.setStyleSheet(styles.SUMMARY_UNIT)
+        lbl_unit_3.setAlignment(Qt.AlignmentFlag.AlignBottom)
+        
+        pay_info_layout.addWidget(lbl_change_title, 3, 0, alignment=Qt.AlignmentFlag.AlignRight)
+        pay_info_layout.addWidget(self.lbl_change_amount, 3, 1, alignment=Qt.AlignmentFlag.AlignRight)
+        pay_info_layout.addWidget(lbl_unit_3, 3, 2, alignment=Qt.AlignmentFlag.AlignBottom)
+        
+        summary_layout.addWidget(pay_info_group, stretch=4)
+        
         left_layout.addWidget(summary_widget)
         
         return left_layout
 
     def create_right_panel(self):
         right_layout = QVBoxLayout()
-        right_layout.setSpacing(10)
+        right_layout.setSpacing(2)
 
         # Buttons
-        btn_affiliate = ActionButton("제휴 할인 및\n포인트 적립/사용", styles.BUTTON_GREEN_STYLE)
-        btn_coupon = ActionButton("CU키핑쿠폰 발급", styles.BUTTON_GREEN_STYLE)
+        button_height = 110 # Consistent height for all
+
+        btn_affiliate = ActionButton("제휴 할인 및\n포인트 적립/사용", styles.BUTTON_GREEN_STYLE, "ⓟ")
+        btn_affiliate.setFixedHeight(button_height)
         
-        btn_card = ActionButton("신용카드", styles.BUTTON_PURPLE_STYLE)
+        btn_coupon = ActionButton("CU키핑쿠폰 발급", styles.BUTTON_GREEN_STYLE, "🎫")
+        btn_coupon.setFixedHeight(button_height)
+        
+        btn_card = ActionButton("신용카드", styles.BUTTON_PURPLE_STYLE, "💳")
+        btn_card.setFixedHeight(button_height)
         btn_card.clicked.connect(self.open_card_payment)
-        btn_cash = ActionButton("현금", styles.BUTTON_PURPLE_STYLE)
-        btn_cash.clicked.connect(self.open_cash_payment)
-        btn_mobile_pay = ActionButton("모바일\n(CU머니 번호결제)", styles.BUTTON_PURPLE_STYLE)
         
-        btn_pay_select = ActionButton("결제선택", styles.BUTTON_GREEN_STYLE) # Darker green highlight?
+        btn_cash = ActionButton("현금", styles.BUTTON_PURPLE_STYLE, "💰")
+        btn_cash.setFixedHeight(button_height)
+        btn_cash.clicked.connect(self.open_cash_payment)
+        
+        btn_mobile_pay = ActionButton("모바일\n(CU머니 번호결제)", styles.BUTTON_PURPLE_STYLE, "📱")
+        btn_mobile_pay.setFixedHeight(button_height)
+        
+        btn_pay_select = ActionButton("결제선택", styles.BUTTON_GREEN_STYLE, "👛")
+        btn_pay_select.setFixedHeight(button_height)
+
+        # Store references for multi-payment
+        self.btn_card = btn_card
+        self.btn_cash = btn_cash
+        self.btn_mobile_pay = btn_mobile_pay
         
         # Split Cancel/Wait
         split_btns = QHBoxLayout()
         btn_cancel = ActionButton("전체취소", styles.BUTTON_RED_STYLE)
+        btn_cancel.setFixedHeight(button_height)
         btn_cancel.clicked.connect(self.clear_cart)
         
         btn_wait = ActionButton("대기", styles.BUTTON_PURPLE_STYLE.replace(styles.PRIMARY_PURPLE, "#78909C")) # Grayish
+        btn_wait.setFixedHeight(button_height)
         btn_wait.clicked.connect(self.handle_wait_click)
         self.btn_wait = btn_wait
         split_btns.addWidget(btn_cancel)
         split_btns.addWidget(btn_wait)
-
         right_layout.addWidget(btn_affiliate)
         right_layout.addWidget(btn_coupon)
         right_layout.addWidget(btn_card)
@@ -452,7 +570,10 @@ class POSMainWindow(QMainWindow):
             # Alignments
             for col in range(6):
                 it = self.table.item(row, col)
-                if col in [3, 4, 5]:
+                if col == 5: # Discount
+                    it.setForeground(QColor("#D32F2F"))
+                    it.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                elif col in [3, 4]:
                     it.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 else:
                     it.setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
@@ -462,22 +583,35 @@ class POSMainWindow(QMainWindow):
     def update_totals(self):
         total_qty = sum(item["qty"] for item in self.cart)
         total_amt = 0
+        total_disc = 0
         for item in self.cart:
              product = self.product_manager.get_product(item["barcode"])
              if product:
                  total_amt += product["price"] * item["qty"]
         
-        self.lbl_total_qty.setText(f"합계   {total_qty}")
-        self.lbl_total_amt.setText(f"{total_amt:,}")
-        self.lbl_final_price.setText(f"{total_amt:,} 원")
-        # Ensure it's large if not already
-        self.lbl_final_price.setStyleSheet(styles.BIG_PRICE_STYLE)
+        # Update Footer
+        self.lbl_foot_qty.setText(str(total_qty))
+        self.lbl_foot_amt.setText(f"{total_amt:,}")
+        self.lbl_foot_disc.setText(f"{total_disc:,}")
+        
+        # Update Big Total (Payments Area)
+        self.lbl_final_price.setText(f"{(total_amt - self.total_paid):,}")
+        self.lbl_received_amount.setText(f"{self.total_paid:,}")
+        self.lbl_change_amount.setText("0")
         
     def clear_cart(self):
         self.cart = []
+        self.total_paid = 0
+        self.payments = []
         self.reset_wait_state()
         self.update_table_view()
         self.update_totals()
+        
+        # Reset button icons
+        if hasattr(self, 'btn_card'): self.btn_card.set_checked(False)
+        if hasattr(self, 'btn_cash'): self.btn_cash.set_checked(False)
+        if hasattr(self, 'btn_mobile_pay'): self.btn_mobile_pay.set_checked(False)
+        
         self.input_barcode.setFocus()
         
     def open_edit_dialog(self, row, col):
@@ -508,104 +642,140 @@ class POSMainWindow(QMainWindow):
         return base + rand
 
     def open_card_payment(self):
-        # Calculate total
-        total_amt = sum(self.product_manager.get_product(item["barcode"])["price"] * item["qty"] for item in self.cart)
+        # Calculate remaining total
+        full_total = sum(self.product_manager.get_product(item["barcode"])["price"] * item["qty"] for item in self.cart)
+        remaining = full_total - self.total_paid
         
-        if total_amt == 0:
-            dialog = CustomMessageDialog("결제 불가", "결제할 상품이 없습니다.", 'warning', self)
-            dialog.exec()
+        if full_total == 0:
+            CustomMessageDialog("결제 불가", "결제할 상품이 없습니다.", 'warning', self).exec()
+            return
+
+        # Toggle off if already paid
+        if hasattr(self, 'btn_card') and self.btn_card.is_checked:
+            # Find and remove the card payment from list
+            for i, p in enumerate(self.payments):
+                if p["method"] == "Card":
+                    self.total_paid -= p["amount"]
+                    self.payments.pop(i)
+                    break
+            self.btn_card.set_checked(False)
+            self.update_totals()
+            return
+
+        if remaining <= 0:
+            CustomMessageDialog("알림", "이미 결제가 완료되었습니다.", 'info', self).exec()
             return
             
-        dialog = CreditCardPaymentDialog(total_amt, self)
+        dialog = CreditCardPaymentDialog(remaining, self)
         if dialog.exec():
-            # Save Transaction
-            items_data = []
-            for item in self.cart:
-                prod = self.product_manager.get_product(item["barcode"])
-                items_data.append({
-                    "name": prod["name"],
-                    "qty": item["qty"],
-                    "price": prod["price"]
-                })
-            card_num = dialog.get_card_number()
-            tx_barcode = self.generate_tx_barcode()
+            paid_now = dialog.get_payment_amount()
+            self.total_paid += paid_now
+            self.payments.append({
+                "method": "Card",
+                "amount": paid_now,
+                "details": {"card_number": dialog.get_card_number()}
+            })
+            if hasattr(self, 'btn_card'): self.btn_card.set_checked(True)
+            self.update_totals()
             
-            self.transaction_manager.save_transaction(
-                items=items_data,
-                total_amt=total_amt,
-                payment_method="Card",
-                payment_details={"card_number": card_num},
-                tx_barcode=tx_barcode
-            )
-            
-            # Show Receipt
-            tx_data = {
-                "items": items_data,
-                "total_amt": total_amt,
-                "payment_method": "Card",
-                "payment_details": {"card_number": card_num},
-                "tx_barcode": tx_barcode
-            }
-            receipt_html = self.receipt_manager.generate_html(tx_data)
-            ReceiptPreviewDialog(receipt_html, self).exec()
-            
-            self.go_to_home()
-            CustomMessageDialog("결제 완료", f"{total_amt:,}원 결제가 완료되었습니다.", 'info', self).exec()
+            # If fully paid, finalize
+            if self.total_paid >= full_total:
+                self.finalize_transaction()
 
     def open_cash_payment(self):
-        # Calculate total
-        total_amt = sum(self.product_manager.get_product(item["barcode"])["price"] * item["qty"] for item in self.cart)
+        # Calculate remaining total
+        full_total = sum(self.product_manager.get_product(item["barcode"])["price"] * item["qty"] for item in self.cart)
+        remaining = full_total - self.total_paid
         
-        if total_amt == 0:
-            dialog = CustomMessageDialog("결제 불가", "결제할 상품이 없습니다.", 'warning', self)
-            dialog.exec()
+        if full_total == 0:
+            CustomMessageDialog("결제 불가", "결제할 상품이 없습니다.", 'warning', self).exec()
+            return
+
+        # Toggle off if already paid
+        if hasattr(self, 'btn_cash') and self.btn_cash.is_checked:
+            # Find and remove cash payment from list
+            for i, p in enumerate(self.payments):
+                if p["method"] == "Cash":
+                    self.total_paid -= p["amount"]
+                    self.payments.pop(i)
+                    break
+            self.btn_cash.set_checked(False)
+            # Reset change label if it was showing
+            self.lbl_change_amount.setText("0")
+            self.update_totals()
+            return
+
+        if remaining <= 0:
+            CustomMessageDialog("알림", "이미 결제가 완료되었습니다.", 'info', self).exec()
             return
             
-        # Stage 1: Payment Check
-        dlg_pay = CashPaymentDialog(total_amt, self)
-        if dlg_pay.exec():
-            # Stage 2: Receipt (passed totals)
-            dlg_receipt = CashReceiptDialog(total_amt, dlg_pay.received_amount, self)
-            if dlg_receipt.exec():
-                # Save Transaction
-                items_data = []
-                for item in self.cart:
-                    prod = self.product_manager.get_product(item["barcode"])
-                    items_data.append({
-                        "name": prod["name"],
-                        "qty": item["qty"],
-                        "price": prod["price"]
-                    })
-                received_amt = dlg_pay.received_amount
-                change_amt = dlg_receipt.change_amount
-                receipt_id = dlg_receipt.get_receipt_id()
-                tx_barcode = self.generate_tx_barcode()
+        dialog = CashPaymentDialog(remaining, self)
+        if dialog.exec():
+            paid_now = dialog.received_amount
+            
+            # Use all cash up to remaining
+            cash_applied = min(paid_now, remaining)
+            change = max(0, paid_now - remaining)
+            
+            self.total_paid += cash_applied
+            self.payments.append({
+                "method": "Cash",
+                "amount": cash_applied,
+                "details": {"received_amt": paid_now, "change_amt": change}
+            })
+            if hasattr(self, 'btn_cash'): self.btn_cash.set_checked(True)
+            self.update_totals()
+            
+            if change > 0:
+                self.lbl_change_amount.setText(f"{change:,}")
+            
+            if self.total_paid >= full_total:
+                # If fully paid, finalize
+                self.finalize_transaction()
 
-                self.transaction_manager.save_transaction(
-                    items=items_data,
-                    total_amt=total_amt,
-                    payment_method="Cash",
-                    received_amt=received_amt,
-                    change_amt=change_amt,
-                    payment_details={"receipt_id": receipt_id},
-                    tx_barcode=tx_barcode
-                )
-                
-                # Show Receipt
-                tx_data = {
-                    "items": items_data,
-                    "total_amt": total_amt,
-                    "payment_method": "Cash",
-                    "received_amt": received_amt,
-                    "change_amt": change_amt,
-                    "payment_details": {"receipt_id": receipt_id},
-                    "tx_barcode": tx_barcode
-                }
-                receipt_html = self.receipt_manager.generate_html(tx_data)
-                ReceiptPreviewDialog(receipt_html, self).exec()
-
-                self.go_to_home()
-                CustomMessageDialog("결제 완료", f"현금 {total_amt:,}원 결제가 완료되었습니다.\n거스름돈: {change_amt:,}원", 'info', self).exec()
+    def finalize_transaction(self):
+        full_total = sum(self.product_manager.get_product(item["barcode"])["price"] * item["qty"] for item in self.cart)
+        items_data = []
+        for item in self.cart:
+            prod = self.product_manager.get_product(item["barcode"])
+            items_data.append({
+                "name": prod["name"],
+                "qty": item["qty"],
+                "price": prod["price"]
+            })
+            
+        tx_barcode = self.generate_tx_barcode()
+        
+        # Determine primary payment method for simple lookup, but store full list
+        primary_method = self.payments[0]["method"] if self.payments else "Unknown"
+        
+        # Prepare transaction data for receipt generator
+        tx_data = {
+            "items": items_data,
+            "total_amt": full_total,
+            "payment_method": primary_method,
+            "payments": self.payments, # Full list of all partial payments
+            "tx_barcode": tx_barcode
+        }
+        
+        self.transaction_manager.save_transaction(
+            items=items_data,
+            total_amt=full_total,
+            payment_method=primary_method,
+            payments=self.payments,
+            tx_barcode=tx_barcode
+        )
+            
+        # Update UI and show receipt
+        self.update_welcome_history()
+        
+        receipt_html = self.receipt_manager.generate_html(tx_data)
+        ReceiptPreviewDialog(receipt_html, self).exec()
+        
+        # Done
+        self.clear_cart()
+        self.go_to_home()
+        CustomMessageDialog("결제 완료", f"총 {full_total:,}원 결제가 완료되었습니다.", 'info', self).exec()
 
     def update_welcome_history(self):
         last_tx = self.transaction_manager.get_last_transaction()
