@@ -113,3 +113,15 @@ class TransactionManager:
         except Exception as e:
             print(f"Error marking transaction as refunded: {e}")
             return "Error"
+
+    def get_transaction_by_barcode(self, barcode):
+        try:
+            with open(self.file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                for tx in data:
+                    if tx.get("tx_barcode") == barcode:
+                        return tx
+            return None
+        except Exception as e:
+            print(f"Error searching transaction by barcode: {e}")
+            return None

@@ -17,12 +17,31 @@ from refund_page import RefundPage
 from receipt_inquiry_page import ReceiptInquiryPage
 from transaction_manager import TransactionManager
 from receipt_manager import ReceiptManager
+from post_payment_page import PostPaymentPage, PostPaymentOptionDialog
 
 class POSMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("CU Retail POS System")
-        self.setGeometry(100, 100, 1024, 768) # Standard POS resolution
+        self.setWindowTitle("DU Retail POS System")
+        
+        # 1. Detect Screen Resolution and set SCALE_FACTOR
+        # Standard height 768 is our baseline (1.0)
+        screen = QApplication.primaryScreen()
+        if screen:
+            screen_geom = screen.availableGeometry()
+            actual_height = screen_geom.height()
+            # If height is less than 760, we scale down (e.g. 720/768 = 0.93)
+            # You can also use a fixed 0.7 if the user explicitly wants 30% smaller
+            # Here let's auto-scale if below 768, otherwise stay at 1.0 or use user preference
+            if actual_height < 768:
+                styles.SCALE_FACTOR = actual_height / 768.0
+            else:
+                styles.SCALE_FACTOR = 1.0
+                
+            # Reload styles to apply new SCALE_FACTOR
+            styles.reload_styles()
+                
+        self.setGeometry(100, 100, styles.s(1024), styles.s(768)) # Standard POS resolution
         
         # Initialize Product Manager and Transaction Manager
         self.product_manager = ProductManager()
@@ -67,6 +86,7 @@ class POSMainWindow(QMainWindow):
         self.welcome_page.refundRequested.connect(lambda: self.switch_page(2))
         self.welcome_page.receiptInquiryRequested.connect(lambda: self.switch_page(3))
         self.welcome_page.waitRequested.connect(self.handle_restore_wait)
+        self.welcome_page.postPaymentRequested.connect(lambda: self.switch_page(5))
         self.central_stack.addWidget(self.welcome_page)
         
         # Load last transaction for welcome page
@@ -93,6 +113,13 @@ class POSMainWindow(QMainWindow):
         self.settings_page = SettingsPage(self.product_manager, self.receipt_manager)
         self.settings_page.backRequested.connect(self.handle_inquiry_back)
         self.central_stack.addWidget(self.settings_page)
+        
+        # 5. Post Payment Page
+        self.post_payment_page = PostPaymentPage()
+        self.post_payment_page.backRequested.connect(lambda: self.switch_page(0))
+        self.post_payment_page.previousTransactionRequested.connect(self.handle_post_prev_tx)
+        self.post_payment_page.barcodeScanned.connect(self.handle_post_barcode)
+        self.central_stack.addWidget(self.post_payment_page)
         
         # Start at Welcome Page
         self.central_stack.setCurrentIndex(0)
@@ -181,7 +208,7 @@ class POSMainWindow(QMainWindow):
         # Home Button
         btn_home = QPushButton("🏠 홈 (Home)")
         btn_home.setStyleSheet(styles.BUTTON_PURPLE_STYLE)
-        btn_home.setFixedHeight(50)
+        btn_home.setFixedHeight(styles.s(50))
         btn_home.clicked.connect(self.go_to_home)
         layout.addWidget(btn_home)
 
@@ -228,17 +255,19 @@ class POSMainWindow(QMainWindow):
         # Table Header Config
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
-        self.table.setColumnWidth(0, 50)   # NO
+        header.setMinimumHeight(styles.s(60))
+        self.table.setColumnWidth(0, styles.s(60))   # NO
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch) # Product Name stretches
-        self.table.setColumnWidth(2, 80)   # Qty
-        self.table.setColumnWidth(3, 150)  # Unit Price
-        self.table.setColumnWidth(4, 150)  # Amount
-        self.table.setColumnWidth(5, 120)  # Discount
+        self.table.setColumnWidth(2, styles.s(100))  # Qty
+        self.table.setColumnWidth(3, styles.s(180))  # Unit Price
+        self.table.setColumnWidth(4, styles.s(180))  # Amount
+        self.table.setColumnWidth(5, styles.s(120))  # Discount
         
         # Remove grid lines/Selection behavior
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(styles.s(80)) # Ensure row is tall enough for padding
         self.table.setShowGrid(False)  # Match clean look
         
         # Connect Click Event
@@ -248,7 +277,7 @@ class POSMainWindow(QMainWindow):
         
         # === Table Footer (Totals Row) ===
         footer_frame = QFrame()
-        footer_frame.setFixedHeight(50)
+        footer_frame.setFixedHeight(styles.s(50))
         footer_frame.setStyleSheet("background-color: #D1D5DB; border-top: 1px solid #99A1AC;")
         footer_layout = QHBoxLayout(footer_frame)
         footer_layout.setContentsMargins(0, 0, 0, 0)
@@ -256,31 +285,31 @@ class POSMainWindow(QMainWindow):
         
         lbl_foot_title_box = QLabel("합계")
         lbl_foot_title_box.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_foot_title_box.setStyleSheet("font-weight: bold; font-size: 20pt; color: #333;")
+        lbl_foot_title_box.setStyleSheet(f"font-weight: bold; font-size: {styles.fs(22)}; color: #333;")
         footer_layout.addWidget(lbl_foot_title_box, stretch=1) # NO + Product Name
         
         self.lbl_foot_qty = QLabel("0")
-        self.lbl_foot_qty.setFixedWidth(80)
+        self.lbl_foot_qty.setFixedWidth(styles.s(100))
         self.lbl_foot_qty.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.lbl_foot_qty.setStyleSheet("font-weight: bold; font-size: 20pt; color: #333;")
+        self.lbl_foot_qty.setStyleSheet(f"font-weight: bold; font-size: {styles.fs(22)}; color: #333;")
         footer_layout.addWidget(self.lbl_foot_qty)
         
         self.lbl_foot_price = QLabel("") # Unit price sum usually not shown or 0
-        self.lbl_foot_price.setFixedWidth(150)
+        self.lbl_foot_price.setFixedWidth(styles.s(180))
         self.lbl_foot_price.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.lbl_foot_price.setStyleSheet("font-weight: bold; font-size: 20pt; color: #333; padding-right: 15px;")
+        self.lbl_foot_price.setStyleSheet(f"font-weight: bold; font-size: {styles.fs(22)}; color: #333; padding-right: {styles.s(15)}px;")
         footer_layout.addWidget(self.lbl_foot_price)
         
         self.lbl_foot_amt = QLabel("0")
-        self.lbl_foot_amt.setFixedWidth(150)
+        self.lbl_foot_amt.setFixedWidth(styles.s(180))
         self.lbl_foot_amt.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.lbl_foot_amt.setStyleSheet("font-weight: bold; font-size: 20pt; color: #333; padding-right: 15px;")
+        self.lbl_foot_amt.setStyleSheet(f"font-weight: bold; font-size: {styles.fs(22)}; color: #333; padding-right: {styles.s(15)}px;")
         footer_layout.addWidget(self.lbl_foot_amt)
         
         self.lbl_foot_disc = QLabel("0")
-        self.lbl_foot_disc.setFixedWidth(120)
+        self.lbl_foot_disc.setFixedWidth(styles.s(120))
         self.lbl_foot_disc.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.lbl_foot_disc.setStyleSheet("font-weight: bold; font-size: 20pt; color: #D32F2F; padding-right: 15px;")
+        self.lbl_foot_disc.setStyleSheet(f"font-weight: bold; font-size: {styles.fs(22)}; color: #D32F2F; padding-right: {styles.s(15)}px;")
         footer_layout.addWidget(self.lbl_foot_disc)
         
         table_footer_column.addWidget(footer_frame)
@@ -297,7 +326,7 @@ class POSMainWindow(QMainWindow):
         btn_bottom = QPushButton("⏬")
         
         for btn in [btn_top, btn_up, btn_down, btn_bottom]:
-            btn.setFixedWidth(60) 
+            btn.setFixedWidth(styles.s(60)) 
             btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
             btn.setStyleSheet(styles.WELCOME_SCROLL_BUTTON_STYLE)
             scroll_panel.addWidget(btn)
@@ -315,8 +344,9 @@ class POSMainWindow(QMainWindow):
         # Total Summary & Input Area
         summary_widget = QWidget()
         summary_widget.setStyleSheet(styles.SUMMARY_CONTAINER_STYLE)
+        summary_widget.setMaximumHeight(styles.s(250)) # Further increased to reduce list view dominance
         summary_layout = QHBoxLayout(summary_widget)
-        summary_layout.setContentsMargins(20, 15, 20, 15)
+        summary_layout.setContentsMargins(20, 25, 20, 50) # Increased bottom padding specifically
         summary_layout.setSpacing(15)
         
         # --- Left Side: Barcode Input ---
@@ -326,7 +356,7 @@ class POSMainWindow(QMainWindow):
         self.input_barcode = QLineEdit()
         self.input_barcode.setPlaceholderText("상품의 바코드를 스캔하세요...")
         self.input_barcode.setStyleSheet(styles.BARCODE_INPUT_STYLE)
-        self.input_barcode.setFixedHeight(70)
+        self.input_barcode.setFixedHeight(styles.s(60)) # Slightly shorter input
         self.input_barcode.returnPressed.connect(self.handle_barcode_input)
         self.input_barcode.textChanged.connect(self.on_barcode_text_changed)
         
@@ -340,10 +370,15 @@ class POSMainWindow(QMainWindow):
         
         # --- Right Side: Payment Info ---
         pay_info_group = QWidget()
-        pay_info_layout = QGridLayout(pay_info_group)
+        # Wrapper to allow centering it if needed, but we keep it tightly grouped
+        pay_info_vbox = QVBoxLayout(pay_info_group)
+        pay_info_vbox.setContentsMargins(0, 0, 0, 0)
+        pay_info_vbox.setSpacing(0)
+        
+        pay_info_layout = QGridLayout()
         pay_info_layout.setContentsMargins(10, 0, 0, 0)
         pay_info_layout.setSpacing(5) # Reduced spacing
-        pay_info_layout.setVerticalSpacing(2) # Reduced line spacing
+        pay_info_layout.setVerticalSpacing(styles.s(8)) # Increased for better readability
         
         # Row 0: 받을 금액 (Red Highlight)
         lbl_receive_title = QLabel("받을 금액")
@@ -354,30 +389,28 @@ class POSMainWindow(QMainWindow):
         
         lbl_unit_1 = QLabel("원")
         lbl_unit_1.setStyleSheet(styles.SUMMARY_UNIT)
-        lbl_unit_1.setAlignment(Qt.AlignmentFlag.AlignBottom)
+        lbl_unit_1.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         
-        pay_info_layout.addWidget(lbl_receive_title, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
-        pay_info_layout.addWidget(self.lbl_final_price, 0, 1, alignment=Qt.AlignmentFlag.AlignRight)
-        pay_info_layout.addWidget(lbl_unit_1, 0, 2, alignment=Qt.AlignmentFlag.AlignBottom)
+        pay_info_layout.addWidget(lbl_receive_title, 0, 0, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        pay_info_layout.addWidget(self.lbl_final_price, 0, 1, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        pay_info_layout.addWidget(lbl_unit_1, 0, 2, alignment=Qt.AlignmentFlag.AlignVCenter)
         
-        # h_divider removed
-        
-        # Row 2: 결제한 금액
+        # Row 1: 결제한 금액
         lbl_paid_title = QLabel("결제한 금액")
         lbl_paid_title.setStyleSheet(styles.SUMMARY_LABEL_STYLE)
         
-        self.lbl_received_amount = QLabel("0") # Renamed for clarity, logic needs check
+        self.lbl_received_amount = QLabel("0") 
         self.lbl_received_amount.setStyleSheet(styles.SUMMARY_TOTAL_DARK)
         
         lbl_unit_2 = QLabel("원")
         lbl_unit_2.setStyleSheet(styles.SUMMARY_UNIT)
-        lbl_unit_2.setAlignment(Qt.AlignmentFlag.AlignBottom)
+        lbl_unit_2.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         
-        pay_info_layout.addWidget(lbl_paid_title, 2, 0, alignment=Qt.AlignmentFlag.AlignRight)
-        pay_info_layout.addWidget(self.lbl_received_amount, 2, 1, alignment=Qt.AlignmentFlag.AlignRight)
-        pay_info_layout.addWidget(lbl_unit_2, 2, 2, alignment=Qt.AlignmentFlag.AlignBottom)
+        pay_info_layout.addWidget(lbl_paid_title, 1, 0, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        pay_info_layout.addWidget(self.lbl_received_amount, 1, 1, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        pay_info_layout.addWidget(lbl_unit_2, 1, 2, alignment=Qt.AlignmentFlag.AlignVCenter)
         
-        # Row 3: 거스름돈
+        # Row 2: 거스름돈
         lbl_change_title = QLabel("거스름돈")
         lbl_change_title.setStyleSheet(styles.SUMMARY_LABEL_STYLE)
         
@@ -386,14 +419,17 @@ class POSMainWindow(QMainWindow):
         
         lbl_unit_3 = QLabel("원")
         lbl_unit_3.setStyleSheet(styles.SUMMARY_UNIT)
-        lbl_unit_3.setAlignment(Qt.AlignmentFlag.AlignBottom)
+        lbl_unit_3.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         
-        pay_info_layout.addWidget(lbl_change_title, 3, 0, alignment=Qt.AlignmentFlag.AlignRight)
-        pay_info_layout.addWidget(self.lbl_change_amount, 3, 1, alignment=Qt.AlignmentFlag.AlignRight)
-        pay_info_layout.addWidget(lbl_unit_3, 3, 2, alignment=Qt.AlignmentFlag.AlignBottom)
+        pay_info_layout.addWidget(lbl_change_title, 2, 0, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        pay_info_layout.addWidget(self.lbl_change_amount, 2, 1, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        pay_info_layout.addWidget(lbl_unit_3, 2, 2, alignment=Qt.AlignmentFlag.AlignVCenter)
+        
+        pay_info_vbox.addLayout(pay_info_layout)
         
         summary_layout.addWidget(pay_info_group, stretch=4)
         
+        left_layout.addLayout(main_table_layout, stretch=1) # Give table space priority
         left_layout.addWidget(summary_widget)
         
         return left_layout
@@ -403,12 +439,12 @@ class POSMainWindow(QMainWindow):
         right_layout.setSpacing(2)
 
         # Buttons
-        button_min_height = 80 # Smaller minimum height to allow shrinking
+        button_min_height = styles.s(80) # Smaller minimum height to allow shrinking
         
         btn_affiliate = ActionButton("제휴 할인 및\n포인트 적립/사용", styles.BUTTON_GREEN_STYLE, "ⓟ")
         btn_affiliate.setMinimumHeight(button_min_height)
         
-        btn_coupon = ActionButton("CU키핑쿠폰 발급", styles.BUTTON_GREEN_STYLE, "🎫")
+        btn_coupon = ActionButton("DU키핑쿠폰 발급", styles.BUTTON_GREEN_STYLE, "🎫")
         btn_coupon.setMinimumHeight(button_min_height)
         
         btn_card = ActionButton("신용카드", styles.BUTTON_PURPLE_STYLE, "💳")
@@ -419,7 +455,7 @@ class POSMainWindow(QMainWindow):
         btn_cash.setMinimumHeight(button_min_height)
         btn_cash.clicked.connect(self.open_cash_payment)
         
-        btn_mobile_pay = ActionButton("모바일\n(CU머니 번호결제)", styles.BUTTON_PURPLE_STYLE, "📱")
+        btn_mobile_pay = ActionButton("모바일\n(DU머니 번호결제)", styles.BUTTON_PURPLE_STYLE, "📱")
         btn_mobile_pay.setMinimumHeight(button_min_height)
         
         btn_pay_select = ActionButton("결제선택", styles.BUTTON_GREEN_STYLE, "👛")
@@ -454,7 +490,7 @@ class POSMainWindow(QMainWindow):
 
     def create_bottom_panel_frame(self):
         bottom_frame = QFrame()
-        bottom_frame.setFixedHeight(60)
+        bottom_frame.setFixedHeight(styles.s(60))
         bottom_frame.setStyleSheet(f"background-color: #EEEEEE; border: none;")
         layout = QHBoxLayout(bottom_frame)
         layout.setContentsMargins(10, 5, 10, 5)
@@ -473,7 +509,7 @@ class POSMainWindow(QMainWindow):
         for text, style in buttons:
             btn = QPushButton(text)
             btn.setStyleSheet(style)
-            btn.setFixedHeight(40)
+            btn.setFixedHeight(styles.s(40))
             layout.addWidget(btn)
             
         return bottom_frame
@@ -492,7 +528,7 @@ class POSMainWindow(QMainWindow):
         # Row 1: Common Items (Shortcuts)
         # Using some predefined barcodes for these buttons
         common_items = [
-            ("친환경)CU백색봉투대\n100", "8801000000003"), 
+            ("친환경)DU백색봉투대\n100", "8801000000003"), 
             ("아이시스2L P6입\n3,600", "8801000000004"), 
             ("유앤)포켓몬볼모양젤\n1,000", "8801000000005"), 
             ("츄파춥스12g\n300", "8801000000006"), 
@@ -924,6 +960,24 @@ class POSMainWindow(QMainWindow):
         self.central_stack.setCurrentIndex(1)
         self.update_table_view()
         self.update_totals()
+
+    def handle_post_prev_tx(self):
+        # Logic for "직전거래" button on post-payment page
+        last_tx = self.transaction_manager.get_last_transaction()
+        if last_tx:
+            dialog = PostPaymentOptionDialog(self)
+            dialog.exec()
+        else:
+            CustomMessageDialog("알림", "직전 거래 내역이 없습니다.", 'warning', self).exec()
+
+    def handle_post_barcode(self, barcode):
+        # Logic for barcode scan on post-payment page
+        tx = self.transaction_manager.get_transaction_by_barcode(barcode)
+        if tx:
+            dialog = PostPaymentOptionDialog(self)
+            dialog.exec()
+        else:
+            CustomMessageDialog("조회 실패", f"바코드[{barcode}]에 해당하는 거래가 없습니다.", 'warning', self).exec()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

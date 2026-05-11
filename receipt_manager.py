@@ -3,13 +3,13 @@ import json
 import os
 
 class ReceiptManager:
-    def __init__(self, store_name="CU 화도오월점"):
+    def __init__(self, store_name="DU 순천점"):
         self.config_path = "store_info.json"
         self.default_info = {
-            "store_name": "CU 화도오월점",
+            "store_name": "DU 순천점",
             "biz_num": "8522100347",
-            "address": "경기도 남양주시 화도읍 경춘로1896-8, (녹촌리) 1층",
-            "owner": "김하순",
+            "address": "전라남도 순천시 조례동 312",
+            "owner": "홍길동",
             "tel": "0315115187"
         }
         self.load_store_info()
@@ -219,7 +219,7 @@ class ReceiptManager:
         </head>
         <body>
             <div class="center">
-                <span class="logo">CU</span> <span class="again">Again</span>
+                <span class="logo">DU</span> <span class="again">Again</span>
             </div>
             <div class="center" style="margin-top: 8px; font-weight: bold;">
                 ******* 최근영수증발행인쇄 *******

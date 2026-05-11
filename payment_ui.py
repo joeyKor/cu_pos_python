@@ -1,7 +1,7 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QFrame, QWidget, QLineEdit, QGridLayout,
                              QTabWidget, QGraphicsDropShadowEffect)
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QFont
 from ui_components import CustomMessageDialog
 
@@ -15,6 +15,7 @@ class CreditCardPaymentDialog(QDialog):
         self.setFixedSize(600, 500)
         
         self.total_amount = total_amount
+        self.is_auto_processing = False
         
         # Main Container
         self.container = QFrame(self)
@@ -49,6 +50,7 @@ class CreditCardPaymentDialog(QDialog):
         
         # Set Focus to Card Number
         self.txt_card_num.setFocus()
+        self.txt_card_num.textChanged.connect(self.on_card_num_changed)
         
     def create_header(self):
         header = QFrame()
@@ -287,6 +289,55 @@ class CreditCardPaymentDialog(QDialog):
             return
 
         self.accept()
+
+    def on_card_num_changed(self, text):
+        if len(text) == 12 and text.isdigit() and not self.is_auto_processing:
+            self.start_auto_payment()
+
+    def start_auto_payment(self):
+        self.is_auto_processing = True
+        # Show "No Signature" Overlay
+        self.show_no_signature_overlay()
+        # Wait 3 seconds then accept
+        QTimer.singleShot(3000, self.accept)
+
+    def show_no_signature_overlay(self):
+        # Create a full-size overlay
+        overlay = QFrame(self.container)
+        overlay.setGeometry(0, 40, self.container.width(), self.container.height() - 40)
+        overlay.setStyleSheet("background-color: white; border: none;")
+        
+        layout = QVBoxLayout(overlay)
+        layout.setContentsMargins(50, 50, 50, 50)
+        layout.setSpacing(20)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        title_label = QLabel("전자서명")
+        title_label.setStyleSheet("font-size: 18pt; font-weight: bold; color: #5c6bc0;")
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Divider line
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("background-color: #5c6bc0; height: 2px;")
+        
+        msg_main = QLabel("무서명 거래 입니다.")
+        msg_main.setStyleSheet("font-size: 22pt; font-weight: bold; color: #333;")
+        msg_main.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        msg_sub = QLabel("고객 서명이 필요하지 않은 거래 입니다.")
+        msg_sub.setStyleSheet("font-size: 14pt; color: #666;")
+        msg_sub.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        layout.addWidget(title_label)
+        layout.addWidget(line)
+        layout.addStretch()
+        layout.addWidget(msg_main)
+        layout.addWidget(msg_sub)
+        layout.addStretch()
+        
+        overlay.show()
+        overlay.raise_()
 
     def get_card_number(self):
         return self.txt_card_num.text().strip()

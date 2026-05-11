@@ -5,6 +5,7 @@ from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QPalette, QBrush, QPixmap
 import styles
 
+
 class RefundPage(QWidget):
     backRequested = pyqtSignal()
     barcodeScanned = pyqtSignal(str)

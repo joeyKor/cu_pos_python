@@ -74,21 +74,32 @@ class SettingsPage(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(4)
         self.table.setHorizontalHeaderLabels(["바코드", "상품명", "단가", "분류"])
-        self.table.setStyleSheet(styles.TABLE_STYLE)
+        
+        # Override global TABLE_STYLE for a more compact view in Settings
+        SETTINGS_TABLE_STYLE = styles.TABLE_STYLE.replace(
+            f"font-size: {styles.fs(22)};", f"font-size: {styles.fs(18)};"
+        ).replace(
+            f"padding-top: {styles.s(20)}px;", f"padding-top: {styles.s(8)}px;"
+        ).replace(
+            f"padding-bottom: {styles.s(20)}px;", f"padding-bottom: {styles.s(8)}px;"
+        )
+        self.table.setStyleSheet(SETTINGS_TABLE_STYLE)
         
         # Resize modes
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self.table.setColumnWidth(0, 280) # Much wider Barcode
-        self.table.setColumnWidth(2, 100) # Price
-        self.table.setColumnWidth(3, 120) # Category
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch) # Name takes remaining (narrower)
+        header.setMinimumHeight(styles.s(50))
+        self.table.setColumnWidth(0, styles.s(280)) # Slightly narrower barcode
+        self.table.setColumnWidth(2, styles.s(100)) # Price
+        self.table.setColumnWidth(3, styles.s(120)) # Category
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch) # Name takes remaining
         
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(styles.s(50)) # More compact rows
         self.table.cellClicked.connect(self.on_table_click)
         
         left_layout.addWidget(lbl_title)
