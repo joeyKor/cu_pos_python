@@ -17,7 +17,12 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 class ClickableLabel(QLabel):
+    clicked = pyqtSignal()
     doubleClicked = pyqtSignal()
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+        super().mousePressEvent(event)
     def mouseDoubleClickEvent(self, event):
         self.doubleClicked.emit()
         super().mouseDoubleClickEvent(event)
@@ -32,9 +37,16 @@ class WelcomePage(QWidget):
     receiptInquiryRequested = pyqtSignal()
     waitRequested = pyqtSignal(int)
     postPaymentRequested = pyqtSignal()
+    productInquiryRequested = pyqtSignal()
+    transitCardRequested = pyqtSignal()
+    checkInquiryRequested = pyqtSignal()
+    calculatorRequested = pyqtSignal()
+    changeAccumulationRequested = pyqtSignal()
+    parcelServiceRequested = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, product_manager, parent=None):
         super().__init__(parent)
+        self.product_manager = product_manager
         self.init_ui()
 
     def init_ui(self):
@@ -168,20 +180,38 @@ class WelcomePage(QWidget):
         lbl_s_title.setStyleSheet(f"font-size: {styles.fs(11)}; font-weight: bold; color: #34495E; background: transparent;")
         s_lyt.addWidget(lbl_s_title)
         
-        def add_stat(label, value):
-            h = QHBoxLayout()
-            lbl_l = QLabel(label)
-            lbl_l.setStyleSheet(f"font-size: {styles.fs(10)}; color: #5D6D7E; background: transparent;")
-            h.addWidget(lbl_l)
-            h.addStretch()
-            v = QLabel(value)
-            v.setStyleSheet(f"font-size: {styles.fs(10)}; color: #9162C0; font-weight: bold; background: transparent; text-decoration: underline;")
-            h.addWidget(v)
-            s_lyt.addLayout(h)
-            
-        add_stat("환불 :", "0건")
-        add_stat("전체취소 :", "0건")
-        add_stat("등록취소 :", "0건")
+        # Stat Row 1: Refund
+        h_refund = QHBoxLayout()
+        lbl_refund_l = QLabel("환불 :")
+        lbl_refund_l.setStyleSheet(f"font-size: {styles.fs(10)}; color: #5D6D7E; background: transparent;")
+        h_refund.addWidget(lbl_refund_l)
+        h_refund.addStretch()
+        self.lbl_stat_refund = QLabel("0건")
+        self.lbl_stat_refund.setStyleSheet(f"font-size: {styles.fs(10)}; color: #9162C0; font-weight: bold; background: transparent; text-decoration: underline;")
+        h_refund.addWidget(self.lbl_stat_refund)
+        s_lyt.addLayout(h_refund)
+        
+        # Stat Row 2: Total Cancel
+        h_t_cancel = QHBoxLayout()
+        lbl_t_cancel_l = QLabel("전체취소 :")
+        lbl_t_cancel_l.setStyleSheet(f"font-size: {styles.fs(10)}; color: #5D6D7E; background: transparent;")
+        h_t_cancel.addWidget(lbl_t_cancel_l)
+        h_t_cancel.addStretch()
+        self.lbl_stat_total_cancel = QLabel("0건")
+        self.lbl_stat_total_cancel.setStyleSheet(f"font-size: {styles.fs(10)}; color: #9162C0; font-weight: bold; background: transparent; text-decoration: underline;")
+        h_t_cancel.addWidget(self.lbl_stat_total_cancel)
+        s_lyt.addLayout(h_t_cancel)
+        
+        # Stat Row 3: Item Cancel
+        h_i_cancel = QHBoxLayout()
+        lbl_i_cancel_l = QLabel("등록취소 :")
+        lbl_i_cancel_l.setStyleSheet(f"font-size: {styles.fs(10)}; color: #5D6D7E; background: transparent;")
+        h_i_cancel.addWidget(lbl_i_cancel_l)
+        h_i_cancel.addStretch()
+        self.lbl_stat_item_cancel = QLabel("0건")
+        self.lbl_stat_item_cancel.setStyleSheet(f"font-size: {styles.fs(10)}; color: #9162C0; font-weight: bold; background: transparent; text-decoration: underline;")
+        h_i_cancel.addWidget(self.lbl_stat_item_cancel)
+        s_lyt.addLayout(h_i_cancel)
         
         lbl_occ = QLabel("발생하였습니다.")
         lbl_occ.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -275,9 +305,20 @@ class WelcomePage(QWidget):
                 
                 if text == "영수증조회":
                     btn.clicked.connect(self.receiptInquiryRequested.emit)
+                elif text == "상품조회":
+                    btn.clicked.connect(self.productInquiryRequested.emit)
+                elif text == "교통카드":
+                    btn.clicked.connect(self.transitCardRequested.emit)
                 elif text == "교통카드잔액조회":
-                    # Potentially add logic if needed, but for now just UI
-                    pass
+                    btn.clicked.connect(self.transitCardRequested.emit)
+                elif text == "수표조회":
+                    btn.clicked.connect(self.checkInquiryRequested.emit)
+                elif text == "계산기":
+                    btn.clicked.connect(self.calculatorRequested.emit)
+                elif text == "잔돈적립":
+                    btn.clicked.connect(self.changeAccumulationRequested.emit)
+                elif text == "택배":
+                    btn.clicked.connect(self.parcelServiceRequested.emit)
                 
                 grid.addWidget(btn, i // 2, i % 2)
             
@@ -289,7 +330,7 @@ class WelcomePage(QWidget):
         # items are ["상품조회", "영수증조회", "수표조회", "교통카드잔액조회"]
         # In create_group_box, buttons are added to a grid. We need to find the right button.
         # Let's modify create_group_box to handle clicks if needed or find it manually.
-        service_box = create_group_box("서비스", "#8A79B6", ["교통카드", "택배", "프리페이드", "공공요금"])
+        service_box = create_group_box("서비스", "#8A79B6", ["교통카드", "택배", "잔돈적립", "계산기"])
         
         group_layout.addWidget(inquiry_box)
         group_layout.addWidget(service_box)
@@ -314,6 +355,8 @@ class WelcomePage(QWidget):
         safe_frame = QFrame()
         safe_frame.setFixedHeight(styles.s(160))
         safe_frame.setStyleSheet(f"background: #ECEFF1; border: none; border-radius: {styles.s(8)}px;")
+        safe_frame.setCursor(Qt.CursorShape.PointingHandCursor)
+        safe_frame.mousePressEvent = lambda event: self.safeBalanceEditRequested.emit()
         safe_lyt = QVBoxLayout(safe_frame)
         safe_lyt.setContentsMargins(styles.s(15), styles.s(15), styles.s(15), styles.s(15))
         safe_lyt.addWidget(QLabel("금고보관", styleSheet=f"font-weight: bold; font-size: {styles.fs(14)}; color: #555;"))
@@ -321,7 +364,6 @@ class WelcomePage(QWidget):
         self.lbl_safe_val.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_safe_val.setCursor(Qt.CursorShape.PointingHandCursor)
         self.lbl_safe_val.setStyleSheet(f"background: white; color: #D32F2F; font-weight: bold; font-size: {styles.fs(20)}; padding: {styles.s(10)}px; border-radius: {styles.s(4)}px; border: none;") # Removed border
-        self.lbl_safe_val.doubleClicked.connect(self.safeBalanceEditRequested.emit)
         safe_lyt.addWidget(self.lbl_safe_val)
 
         pay_safe_row.addWidget(btn_disc_top, stretch=1)
@@ -403,41 +445,12 @@ class WelcomePage(QWidget):
         bottom_lyt = QVBoxLayout(bottom_widget)
         bottom_lyt.setContentsMargins(10, 0, 10, 10)
         
-        # Quick items
-        q_row = QHBoxLayout()
-        q_row.setSpacing(5)
-        q_items = [
-            ("친환경)DU백색봉투대\n100", "8801000000003"), 
-            ("아이시스2L P6입\n3,600", "8801000000004"), 
-            ("유앤)포켓몬볼모양젤\n1,000", "8801000000005"), 
-            ("츄파춥스12g\n300", "8801000000006"), 
-            ("트롤리지구젤리(낱개)\n1,000", "8801000000007")
-        ]
+        # Quick items container
+        self.q_items_layout = QHBoxLayout()
+        self.q_items_layout.setSpacing(5)
+        self.refresh_quick_items()
         
-        for name, barcode in q_items:
-            # Need to get current price for these but let's use placeholders as per image
-            f = QFrame()
-            f.setFixedHeight(styles.s(65))
-            f.setObjectName("quick_item")
-            f.setStyleSheet(styles.WELCOME_QUICK_ITEM_FRAME)
-            l = QVBoxLayout(f)
-            l.setContentsMargins(5, 5, 5, 5)
-            l.setSpacing(0)
-            
-            n_parts = name.split("\n")
-            it_name = QLabel(n_parts[0])
-            it_name.setStyleSheet(styles.WELCOME_ITEM_NAME_LABEL)
-            it_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            
-            it_price = QLabel(n_parts[1] if len(n_parts) > 1 else "0")
-            it_price.setStyleSheet(styles.WELCOME_PRICE_LABEL)
-            it_price.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            
-            l.addWidget(it_name)
-            l.addWidget(it_price)
-            q_row.addWidget(f, stretch=1)
-            
-        bottom_lyt.addLayout(q_row)
+        bottom_lyt.addLayout(self.q_items_layout)
         
         # Category Tabs
         cat_row = QHBoxLayout()
@@ -449,7 +462,8 @@ class WelcomePage(QWidget):
         
         cats = [("일반상품", "#7AB800"), ("소분상품", "#6C757D"), ("신문/상품권", "#6C757D"), ("쓰레기봉투/화장", "#6C757D"), ("점포등록", "#6C757D"), ("상품관리", "#6C757D")]
         for n, c in cats:
-            b = QPushButton(n)
+            display_text = n if n in ["점포등록", "상품관리"] else ""
+            b = QPushButton(display_text)
             b.setFixedHeight(styles.s(50))
             b.setStyleSheet(f"background: white; color: #333; font-weight: bold; border: none; border-top: {styles.s(4)}px solid {c};")
             if n == "상품관리":
@@ -484,12 +498,40 @@ class WelcomePage(QWidget):
 
     def on_barcode_return(self):
         barcode = self.barcode_input.text().strip()
+        for kor_prefix in ["ㅔ묘", "ㅖ묘", "ㅔ됴", "ㅖ됴"]:
+            if barcode.startswith(kor_prefix):
+                barcode = "pay" + barcode[len(kor_prefix):]
+                break
         if barcode:
             self.barcodeScanned.emit(barcode)
             self.barcode_input.clear()
+            self.barcode_input.setStyleSheet(styles.WELCOME_INPUT_STYLE + f"background: transparent; color: #333; font-size: {styles.fs(20)};")
 
     def on_barcode_text_changed(self, text):
-        if len(text) >= 13:
+        for kor_prefix in ["ㅔ묘", "ㅖ묘", "ㅔ됴", "ㅖ됴"]:
+            if text.startswith(kor_prefix):
+                text = "pay" + text[len(kor_prefix):]
+                self.barcode_input.blockSignals(True)
+                self.barcode_input.setText(text)
+                self.barcode_input.blockSignals(False)
+                break
+
+        lower_text = text.lower()
+        if lower_text.startswith("pay"):
+            self.barcode_input.setStyleSheet(styles.WELCOME_INPUT_STYLE + f"background: transparent; color: white; font-size: {styles.fs(20)};")
+        else:
+            self.barcode_input.setStyleSheet(styles.WELCOME_INPUT_STYLE + f"background: transparent; color: #333; font-size: {styles.fs(20)};")
+
+        should_submit = False
+        if lower_text.startswith("pay"):
+            digits_count = sum(1 for c in text[3:] if c.isdigit())
+            if digits_count >= 13:
+                should_submit = True
+        else:
+            if len(text) >= 13:
+                should_submit = True
+                
+        if should_submit:
             self.on_barcode_return()
 
     def update_last_transaction(self, data):
@@ -522,3 +564,56 @@ class WelcomePage(QWidget):
     def showEvent(self, event):
         super().showEvent(event)
         self.barcode_input.setFocus()
+        # Refresh quick items whenever page is shown
+        self.refresh_quick_items()
+
+    def refresh_quick_items(self):
+        # Clear existing
+        if not hasattr(self, 'q_items_layout'): return
+        
+        while self.q_items_layout.count():
+            item = self.q_items_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
+        quick_items = self.product_manager.get_quick_items(limit=5)
+        
+        for bc, data in quick_items:
+            f = QFrame()
+            f.setFixedHeight(styles.s(65))
+            f.setObjectName("quick_item")
+            f.setCursor(Qt.CursorShape.PointingHandCursor)
+            # Hover effect
+            f.setStyleSheet(styles.WELCOME_QUICK_ITEM_FRAME + "QFrame:hover { background-color: #E0E0E0; border: 1px solid #7B68EE; }")
+            
+            l = QVBoxLayout(f)
+            l.setContentsMargins(5, 5, 5, 5)
+            l.setSpacing(0)
+            
+            it_name = QLabel(data["name"])
+            it_name.setStyleSheet(styles.WELCOME_ITEM_NAME_LABEL)
+            it_name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            it_price = QLabel(f"{data['price']:,}")
+            it_price.setStyleSheet(styles.WELCOME_PRICE_LABEL)
+            it_price.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            
+            l.addWidget(it_name)
+            l.addWidget(it_price)
+            
+            # Make clickable (using dynamic property or capturing lambda)
+            f.mousePressEvent = lambda e, barcode=bc: self.barcodeScanned.emit(barcode)
+            
+            self.q_items_layout.addWidget(f, stretch=1)
+            
+        # Fill empty slots
+        for _ in range(5 - len(quick_items)):
+            f = QFrame()
+            f.setFixedHeight(styles.s(65))
+            f.setStyleSheet("background-color: #F8F9FA; border: 1px dashed #DDD; border-radius: 4px;")
+            self.q_items_layout.addWidget(f, stretch=1)
+
+    def update_statistics(self, refund_cnt, total_cancel_cnt, item_cancel_cnt):
+        self.lbl_stat_refund.setText(f"{refund_cnt}건")
+        self.lbl_stat_total_cancel.setText(f"{total_cancel_cnt}건")
+        self.lbl_stat_item_cancel.setText(f"{item_cancel_cnt}건")

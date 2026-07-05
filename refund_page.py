@@ -1,10 +1,18 @@
 import os
+import sys
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QLineEdit, QFrame, QSpacerItem, QSizePolicy)
 from PyQt6.QtCore import Qt, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QPalette, QBrush, QPixmap
 import styles
 
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
 
 class RefundPage(QWidget):
     backRequested = pyqtSignal()
@@ -50,7 +58,7 @@ class RefundPage(QWidget):
 
         # Single Receipt Image Display
         self.receipt_label = QLabel()
-        img_path = r"C:\Users\joy\.gemini\antigravity\brain\292b5aaf-c0ae-439d-8ae2-8654b22aaa7c\cu_thermal_receipt_graphic_clean_1767624732528.png"
+        img_path = resource_path(os.path.join("assets", "cu_thermal_receipt_graphic.png"))
         if os.path.exists(img_path):
             pixmap = QPixmap(img_path)
             # Scale to fit nicely while maintaining aspect ratio

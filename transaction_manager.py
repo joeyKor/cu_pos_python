@@ -3,9 +3,10 @@ import os
 from datetime import datetime
 
 class TransactionManager:
-    def __init__(self, file_path="transactions.json", config_path="safe_config.json"):
-        self.file_path = file_path
-        self.config_path = config_path
+    def __init__(self, file_path=None, config_path=None):
+        os.makedirs("json", exist_ok=True)
+        self.file_path = file_path or os.path.join("json", "transactions.json")
+        self.config_path = config_path or os.path.join("json", "safe_config.json")
         self._ensure_file_exists()
 
     def _ensure_file_exists(self):
@@ -125,3 +126,24 @@ class TransactionManager:
         except Exception as e:
             print(f"Error searching transaction by barcode: {e}")
             return None
+
+    def get_pos_stats(self):
+        try:
+            with open(self.config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                return config.get("total_cancel_count", 0), config.get("item_cancel_count", 0)
+        except:
+            return 0, 0
+
+    def save_pos_stats(self, total_cancel, item_cancel):
+        try:
+            with open(self.config_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            config["total_cancel_count"] = total_cancel
+            config["item_cancel_count"] = item_cancel
+            with open(self.config_path, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=4)
+            return True
+        except Exception as e:
+            print(f"Error saving pos stats: {e}")
+            return False

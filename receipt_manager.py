@@ -4,7 +4,8 @@ import os
 
 class ReceiptManager:
     def __init__(self, store_name="DU 순천점"):
-        self.config_path = "store_info.json"
+        os.makedirs("json", exist_ok=True)
+        self.config_path = os.path.join("json", "store_info.json")
         self.default_info = {
             "store_name": "DU 순천점",
             "biz_num": "8522100347",
@@ -163,9 +164,20 @@ class ReceiptManager:
                 payment_info_html += '<tr><td colspan="3" style="border-top: 1px dashed #000; padding: 5px 0 0 0;"></td></tr>'
 
             if method == "Card":
-                card_num = details.get("card_number", "****-****-****-****")
-                if len(card_num) == 12:
-                    card_num = f"{card_num[:4]}-{card_num[4:6]}**-****-{card_num[10:]}"
+                card_num = details.get("card_number", "xxxx-xxxx-xxxx-xxxx")
+                raw_card = card_num.replace("-", "").strip()
+                if len(raw_card) == 11:
+                    card_num = f"{raw_card[:3]}-xxxx-{raw_card[7:]}"
+                elif len(raw_card) == 12:
+                    card_num = f"{raw_card[:4]}-xxxx-xxxx-{raw_card[10:]}"
+                elif len(raw_card) == 13:
+                    card_num = f"{raw_card[:3]}-xxxx-xxxx-{raw_card[11:]}"
+                elif len(raw_card) == 16:
+                    card_num = f"{raw_card[:4]}-xxxx-xxxx-{raw_card[12:]}"
+                elif len(raw_card) >= 6:
+                    card_num = f"{raw_card[:4]}-xxxx-{raw_card[-2:]}"
+                else:
+                    card_num = "xxxx-xxxx"
                 payment_info_html += f"""
                 <tr>
                     <td class="bold">신 용 카 드</td>
@@ -174,6 +186,48 @@ class ReceiptManager:
                 <tr><td colspan="3" class="center">********* 신 용 카 드 *********</td></tr>
                 <tr><td colspan="3">카드번호: {card_num}</td></tr>
                 <tr><td colspan="3">승인번호: {datetime.datetime.now().strftime("%H%M%S%f")[:8]}</td></tr>
+                """
+            elif method == "MobileVoucher":
+                prod_name = details.get("product_name", "모바일상품권")
+                coupon_code = p.get("details", {}).get("barcode", p.get("barcode", "9900000000000"))
+                if len(coupon_code) == 13:
+                    coupon_code = f"{coupon_code[:4]}-{coupon_code[4:8]}-{coupon_code[8:]}"
+                payment_info_html += f"""
+                <tr>
+                    <td class="bold">모바일 상품권</td>
+                    <td colspan="2" class="col-amt bold">{amt:,}</td>
+                </tr>
+                <tr><td colspan="3" class="center">********* 모바일 상품권 *********</td></tr>
+                <tr><td colspan="3">상품명: {prod_name}</td></tr>
+                <tr><td colspan="3">쿠폰번호: {coupon_code}</td></tr>
+                """
+            elif method == "KeepingCoupon":
+                prod_name = details.get("product_name", "키핑쿠폰")
+                coupon_code = p.get("details", {}).get("barcode", p.get("barcode", "9800000000000"))
+                if len(coupon_code) == 13:
+                    coupon_code = f"{coupon_code[:4]}-{coupon_code[4:8]}-{coupon_code[8:]}"
+                payment_info_html += f"""
+                <tr>
+                    <td class="bold">DU 키핑쿠폰</td>
+                    <td colspan="2" class="col-amt bold">{amt:,}</td>
+                </tr>
+                <tr><td colspan="3" class="center">********* DU 키핑쿠폰 *********</td></tr>
+                <tr><td colspan="3">상품명: {prod_name}</td></tr>
+                <tr><td colspan="3">쿠폰번호: {coupon_code}</td></tr>
+                """
+            elif method == "MobilePay":
+                account_num = details.get("account_number", "010-****-****-**")
+                # Mask account number
+                if len(account_num) >= 13:
+                    account_num = f"{account_num[:4]}****-{account_num[9:13]}**"
+                payment_info_html += f"""
+                <tr>
+                    <td class="bold">모바일 (DU머니)</td>
+                    <td colspan="2" class="col-amt bold">{amt:,}</td>
+                </tr>
+                <tr><td colspan="3" class="center">********* DU머니 결제 *********</td></tr>
+                <tr><td colspan="3">결제계좌: {account_num}</td></tr>
+                <tr><td colspan="3">거래유형: 회원 번호 결제</td></tr>
                 """
             else: # Cash
                 recv = details.get("received_amt", amt)

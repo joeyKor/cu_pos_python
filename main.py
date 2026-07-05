@@ -1,20 +1,26 @@
-import sys, random, datetime
+import sys, os, random, datetime, pyttsx3
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, 
                              QLabel, QLineEdit, QGridLayout, QFrame, QAbstractItemView, 
                              QPushButton, QStackedWidget, QInputDialog, QSizePolicy)
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QPixmap
 
 import styles
 from ui_components import (ActionButton, StatusLabel, SummaryFrame, EditItemDialog, 
-                               CustomMessageDialog, SafeBalanceEditDialog, ReceiptPreviewDialog, StoreRegistrationDialog)
+                               CustomMessageDialog, SafeBalanceEditDialog, ReceiptPreviewDialog, StoreRegistrationDialog, PromotionDialog, VoucherExchangeDialog, KeepingLookupDialog, KeepingCouponIssueDialog, PromoAlertWithRelatedDialog)
 from product_manager import ProductManager
 from settings_page import SettingsPage
-from payment_ui import CreditCardPaymentDialog, CashPaymentDialog, CashReceiptDialog
+from payment_ui import CreditCardPaymentDialog, CashPaymentDialog, CashReceiptDialog, AffiliateDiscountDialog
 from welcome_page import WelcomePage
 from refund_page import RefundPage
 from receipt_inquiry_page import ReceiptInquiryPage
+from check_inquiry_page import CheckInquiryPage
+from transit_card_page import TransitCardPage
+from product_inquiry_page import ProductInquiryPage
+from calculator_page import CalculatorPage
+from change_accumulation_page import ChangeAccumulationPage
+from parcel_service_page import ParcelServicePage
 from transaction_manager import TransactionManager
 from receipt_manager import ReceiptManager
 from post_payment_page import PostPaymentPage, PostPaymentOptionDialog
@@ -48,12 +54,21 @@ class POSMainWindow(QMainWindow):
         self.transaction_manager = TransactionManager()
         self.receipt_manager = ReceiptManager()
         
+        # Initialize TTS Queue and Background Thread
+        import queue
+        import threading
+        self.tts_queue = queue.Queue()
+        self.tts_thread = threading.Thread(target=self._tts_worker, daemon=True)
+        self.tts_thread.start()
+        
         self.tm = self.transaction_manager
         self.rm = self.receipt_manager
         self.wait_slots = [None, None, None]
         self.current_wait_index = -1
         self.total_paid = 0
+        self.membership_discount = 0
         self.payments = []
+        os.makedirs("json", exist_ok=True)
         
         self.init_ui()
 
@@ -62,6 +77,7 @@ class POSMainWindow(QMainWindow):
 
     def init_ui(self):
         self.cart = [] # List of {"barcode": str, "qty": int}
+        self.total_cancel_count, self.item_cancel_count = self.transaction_manager.get_pos_stats()
         
         # Main Stacked Widget
         self.central_stack = QStackedWidget()
@@ -77,8 +93,14 @@ class POSMainWindow(QMainWindow):
         self.setCentralWidget(scroll_area)
         
         # 0. Welcome Page (Start Screen)
-        self.welcome_page = WelcomePage()
+        self.welcome_page = WelcomePage(self.product_manager)
         self.welcome_page.barcodeScanned.connect(self.switch_to_sales_and_add)
+        self.welcome_page.productInquiryRequested.connect(self.open_product_inquiry_welcome)
+        self.welcome_page.transitCardRequested.connect(self.open_transit_card)
+        self.welcome_page.checkInquiryRequested.connect(self.open_check_inquiry)
+        self.welcome_page.calculatorRequested.connect(self.open_calculator)
+        self.welcome_page.changeAccumulationRequested.connect(self.open_change_accumulation)
+        self.welcome_page.parcelServiceRequested.connect(self.open_parcel_service)
         self.welcome_page.settingsRequested.connect(self.open_settings)
         self.welcome_page.safeBalanceEditRequested.connect(self.handle_safe_balance_edit)
         self.welcome_page.storeRegistrationRequested.connect(self.handle_store_registration)
@@ -105,7 +127,7 @@ class POSMainWindow(QMainWindow):
         self.central_stack.addWidget(self.refund_page)
 
         # 3. Receipt Inquiry Page
-        self.receipt_inquiry_page = ReceiptInquiryPage(self.transaction_manager, self.receipt_manager)
+        self.receipt_inquiry_page = ReceiptInquiryPage(self.transaction_manager, self.receipt_manager, self.product_manager)
         self.receipt_inquiry_page.backRequested.connect(self.handle_inquiry_back)
         self.central_stack.addWidget(self.receipt_inquiry_page)
 
@@ -120,6 +142,38 @@ class POSMainWindow(QMainWindow):
         self.post_payment_page.previousTransactionRequested.connect(self.handle_post_prev_tx)
         self.post_payment_page.barcodeScanned.connect(self.handle_post_barcode)
         self.central_stack.addWidget(self.post_payment_page)
+        
+        # 6. Check Inquiry Page
+        self.check_inquiry_page = CheckInquiryPage()
+        self.check_inquiry_page.backRequested.connect(self.handle_inquiry_back)
+        self.central_stack.addWidget(self.check_inquiry_page)
+        
+        # 7. Transit Card Page
+        self.transit_card_page = TransitCardPage()
+        self.transit_card_page.backRequested.connect(self.handle_inquiry_back)
+        self.central_stack.addWidget(self.transit_card_page)
+        
+        # 8. Product Inquiry Page
+        self.product_inquiry_page = ProductInquiryPage(self.product_manager)
+        self.product_inquiry_page.backRequested.connect(self.handle_inquiry_back)
+        self.product_inquiry_page.productSelected.connect(self.handle_product_selection)
+        self.central_stack.addWidget(self.product_inquiry_page)
+        
+        # 9. Calculator Page
+        self.calculator_page = CalculatorPage()
+        self.calculator_page.backRequested.connect(self.handle_inquiry_back)
+        self.central_stack.addWidget(self.calculator_page)
+        
+        # 10. Change Accumulation Page
+        self.change_accumulation_page = ChangeAccumulationPage(self.transaction_manager)
+        self.change_accumulation_page.backRequested.connect(self.handle_inquiry_back)
+        self.change_accumulation_page.accumulationCompleted.connect(self.handle_change_accumulation_completed)
+        self.central_stack.addWidget(self.change_accumulation_page)
+        
+        # 11. Parcel Service Page
+        self.parcel_service_page = ParcelServicePage()
+        self.parcel_service_page.backRequested.connect(self.handle_inquiry_back)
+        self.central_stack.addWidget(self.parcel_service_page)
         
         # Start at Welcome Page
         self.central_stack.setCurrentIndex(0)
@@ -154,15 +208,59 @@ class POSMainWindow(QMainWindow):
         self.focus_timer.setInterval(500)
         self.focus_timer.timeout.connect(self.ensure_barcode_focus)
         self.focus_timer.start()
-
     def switch_to_sales_and_add(self, barcode):
         # Switch to sales page
-        self.central_stack.setCurrentIndex(1)
+        self.switch_page(1)
         # Process the barcode
         self.input_barcode.setText(barcode)
         self.handle_barcode_input()
         # Ensure focus is on the sales page barcode input
         self.input_barcode.setFocus()
+
+    def open_product_inquiry_welcome(self):
+        self.product_inquiry_page.set_sales_mode(False)
+        self.product_inquiry_page.reset_ui()
+        self.switch_page(8)
+
+    def open_product_inquiry_sales(self):
+        self.product_inquiry_page.set_sales_mode(True)
+        self.product_inquiry_page.reset_ui()
+        self.switch_page(8)
+
+    def handle_product_selection(self, barcode):
+        if len(self.page_history) > 1:
+            self.page_history.pop() # remove current page (Index 8)
+        self.switch_to_sales_and_add(barcode)
+
+    def open_transit_card(self):
+        self.switch_page(7)
+
+    def open_calculator(self):
+        self.switch_page(9)
+
+    def open_change_accumulation(self):
+        self.switch_page(10)
+
+    def open_parcel_service(self):
+        self.switch_page(11)
+
+    def handle_change_accumulation_completed(self, amount):
+        if len(self.page_history) > 1:
+            self.page_history.pop()
+        self.switch_page(0)
+        
+        current_total = self.transaction_manager.get_base_safe_amt() + self.transaction_manager.get_cash_total()
+        new_total = current_total + amount
+        cash_total = self.transaction_manager.get_cash_total()
+        new_base = new_total - cash_total
+        
+        self.transaction_manager.set_base_safe_amt(new_base)
+        self.update_welcome_history()
+        
+        CustomMessageDialog("적립 완료", f"잔돈 {amount:,}원이 성공적으로 적립되었습니다.\n금고 보관 금액이 {new_total:,}원으로 업데이트되었습니다.", 'info', self).exec()
+
+    def open_check_inquiry(self):
+        self.switch_page(6)
 
     def go_to_home(self):
         self.clear_cart()
@@ -170,6 +268,7 @@ class POSMainWindow(QMainWindow):
         self.update_welcome_history()
         # Return to Welcome Page
         self.central_stack.setCurrentIndex(0)
+        self.page_history = [0]
 
     def reset_wait_state(self):
         self.current_wait_index = -1
@@ -256,12 +355,16 @@ class POSMainWindow(QMainWindow):
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
         header.setMinimumHeight(styles.s(60))
-        self.table.setColumnWidth(0, styles.s(60))   # NO
+        self.table.setColumnWidth(0, styles.s(50))   # NO
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch) # Product Name stretches
-        self.table.setColumnWidth(2, styles.s(100))  # Qty
-        self.table.setColumnWidth(3, styles.s(180))  # Unit Price
-        self.table.setColumnWidth(4, styles.s(180))  # Amount
-        self.table.setColumnWidth(5, styles.s(120))  # Discount
+        self.table.setColumnWidth(2, styles.s(70))   # Qty
+        self.table.setColumnWidth(3, styles.s(140))  # Unit Price
+        self.table.setColumnWidth(4, styles.s(140))  # Amount
+        self.table.setColumnWidth(5, styles.s(100))  # Discount
+        self.lbl_foot_qty_width = 70
+        self.lbl_foot_price_width = 140
+        self.lbl_foot_amt_width = 140
+        self.lbl_foot_disc_width = 100
         
         # Remove grid lines/Selection behavior
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -289,25 +392,25 @@ class POSMainWindow(QMainWindow):
         footer_layout.addWidget(lbl_foot_title_box, stretch=1) # NO + Product Name
         
         self.lbl_foot_qty = QLabel("0")
-        self.lbl_foot_qty.setFixedWidth(styles.s(100))
+        self.lbl_foot_qty.setFixedWidth(styles.s(self.lbl_foot_qty_width))
         self.lbl_foot_qty.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_foot_qty.setStyleSheet(f"font-weight: bold; font-size: {styles.fs(22)}; color: #333;")
         footer_layout.addWidget(self.lbl_foot_qty)
         
         self.lbl_foot_price = QLabel("") # Unit price sum usually not shown or 0
-        self.lbl_foot_price.setFixedWidth(styles.s(180))
+        self.lbl_foot_price.setFixedWidth(styles.s(self.lbl_foot_price_width))
         self.lbl_foot_price.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.lbl_foot_price.setStyleSheet(f"font-weight: bold; font-size: {styles.fs(22)}; color: #333; padding-right: {styles.s(15)}px;")
         footer_layout.addWidget(self.lbl_foot_price)
         
         self.lbl_foot_amt = QLabel("0")
-        self.lbl_foot_amt.setFixedWidth(styles.s(180))
+        self.lbl_foot_amt.setFixedWidth(styles.s(self.lbl_foot_amt_width))
         self.lbl_foot_amt.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.lbl_foot_amt.setStyleSheet(f"font-weight: bold; font-size: {styles.fs(22)}; color: #333; padding-right: {styles.s(15)}px;")
         footer_layout.addWidget(self.lbl_foot_amt)
         
         self.lbl_foot_disc = QLabel("0")
-        self.lbl_foot_disc.setFixedWidth(styles.s(120))
+        self.lbl_foot_disc.setFixedWidth(styles.s(self.lbl_foot_disc_width))
         self.lbl_foot_disc.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.lbl_foot_disc.setStyleSheet(f"font-weight: bold; font-size: {styles.fs(22)}; color: #D32F2F; padding-right: {styles.s(15)}px;")
         footer_layout.addWidget(self.lbl_foot_disc)
@@ -346,12 +449,28 @@ class POSMainWindow(QMainWindow):
         summary_widget.setStyleSheet(styles.SUMMARY_CONTAINER_STYLE)
         summary_widget.setMaximumHeight(styles.s(250)) # Further increased to reduce list view dominance
         summary_layout = QHBoxLayout(summary_widget)
-        summary_layout.setContentsMargins(20, 25, 20, 50) # Increased bottom padding specifically
+        summary_layout.setContentsMargins(20, 15, 20, 65) # Adjusted margins to shift widgets slightly upward
         summary_layout.setSpacing(15)
         
         # --- Left Side: Barcode Input ---
         barcode_container = QVBoxLayout()
         barcode_container.setContentsMargins(0, 0, 0, 0)
+        
+        self.promo_display_layout = QHBoxLayout()
+        self.promo_display_layout.setSpacing(15)
+        self.promo_display_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        self.lbl_promo_img = QLabel()
+        self.lbl_promo_img.setFixedSize(styles.s(80), styles.s(80))
+        self.lbl_promo_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_promo_img.setStyleSheet("background-color: transparent; border: none;")
+        
+        self.lbl_promo_info = QLabel("")
+        self.lbl_promo_info.setStyleSheet(f"font-size: {styles.fs(22)}; font-weight: bold; color: #D32F2F; margin-bottom: 5px;")
+        self.lbl_promo_info.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        
+        self.promo_display_layout.addWidget(self.lbl_promo_img)
+        self.promo_display_layout.addWidget(self.lbl_promo_info)
         
         self.input_barcode = QLineEdit()
         self.input_barcode.setPlaceholderText("상품의 바코드를 스캔하세요...")
@@ -360,9 +479,10 @@ class POSMainWindow(QMainWindow):
         self.input_barcode.returnPressed.connect(self.handle_barcode_input)
         self.input_barcode.textChanged.connect(self.on_barcode_text_changed)
         
-        barcode_container.addStretch()
+        barcode_container.addStretch(1)
+        barcode_container.addLayout(self.promo_display_layout)
         barcode_container.addWidget(self.input_barcode)
-        barcode_container.addStretch()
+        barcode_container.addStretch(3) # Increase bottom stretch to push input box upward
         
         summary_layout.addLayout(barcode_container, stretch=3)
         
@@ -436,54 +556,79 @@ class POSMainWindow(QMainWindow):
 
     def create_right_panel(self):
         right_layout = QVBoxLayout()
-        right_layout.setSpacing(2)
+        right_layout.setSpacing(styles.s(4))
+        right_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Buttons
-        button_min_height = styles.s(80) # Smaller minimum height to allow shrinking
+        # Buttons minimum height to allow shrinking on lower resolutions
+        button_min_height = styles.s(50)
         
-        btn_affiliate = ActionButton("제휴 할인 및\n포인트 적립/사용", styles.BUTTON_GREEN_STYLE, "ⓟ")
-        btn_affiliate.setMinimumHeight(button_min_height)
+        # Premium styles matching the user's image colors
+        style_affiliate = styles.BUTTON_GREEN_STYLE
+        style_coupon = styles.BUTTON_GREEN_STYLE
+        style_card = styles.BUTTON_PURPLE_STYLE.replace(styles.PRIMARY_PURPLE, "#5E35B1").replace(styles.DARK_PURPLE, "#4527A0")
+        style_cash = styles.BUTTON_PURPLE_STYLE.replace(styles.PRIMARY_PURPLE, "#3F51B5").replace(styles.DARK_PURPLE, "#283593")
+        style_mobile = styles.BUTTON_PURPLE_STYLE.replace(styles.PRIMARY_PURPLE, "#7E57C2").replace(styles.DARK_PURPLE, "#5E35B1")
+        style_pay_select = styles.BUTTON_GREEN_STYLE.replace(styles.ACCENT_GREEN, "#375A4F").replace(styles.DARK_GREEN, "#223B33")
+        style_cancel = styles.BUTTON_RED_STYLE
+        style_wait = styles.BUTTON_PURPLE_STYLE.replace(styles.PRIMARY_PURPLE, "#546E7A").replace(styles.DARK_PURPLE, "#37474F")
         
-        btn_coupon = ActionButton("DU키핑쿠폰 발급", styles.BUTTON_GREEN_STYLE, "🎫")
-        btn_coupon.setMinimumHeight(button_min_height)
+        btn_affiliate = ActionButton("제휴 할인 및\n포인트 적립/사용", style_affiliate, "ⓟ")
+        btn_affiliate.clicked.connect(self.open_affiliate_discount)
+        btn_coupon = ActionButton("CU키핑쿠폰 발급", style_coupon, "🎫")
+        btn_coupon.clicked.connect(self.open_keeping_dialog)
         
-        btn_card = ActionButton("신용카드", styles.BUTTON_PURPLE_STYLE, "💳")
-        btn_card.setMinimumHeight(button_min_height)
+        btn_card = ActionButton("신용카드", style_card, "💳")
         btn_card.clicked.connect(self.open_card_payment)
         
-        btn_cash = ActionButton("현금", styles.BUTTON_PURPLE_STYLE, "💰")
-        btn_cash.setMinimumHeight(button_min_height)
+        btn_cash = ActionButton("현금", style_cash, "🪙")
         btn_cash.clicked.connect(self.open_cash_payment)
         
-        btn_mobile_pay = ActionButton("모바일\n(DU머니 번호결제)", styles.BUTTON_PURPLE_STYLE, "📱")
-        btn_mobile_pay.setMinimumHeight(button_min_height)
+        btn_mobile_pay = ActionButton("모바일\n(미래에셋페이 등)", style_mobile, "📱")
+        btn_mobile_pay.clicked.connect(self.open_mobile_payment)
         
-        btn_pay_select = ActionButton("결제선택", styles.BUTTON_GREEN_STYLE, "👛")
-        btn_pay_select.setMinimumHeight(button_min_height)
+        btn_pay_select = ActionButton("결제선택", style_pay_select, "👛")
 
-        # Store references for multi-payment
+        # Store references for multi-payment/state management
         self.btn_card = btn_card
         self.btn_cash = btn_cash
         self.btn_mobile_pay = btn_mobile_pay
         
-        # Split Cancel/Wait
+        # Split Cancel/Wait buttons
         split_btns = QHBoxLayout()
-        btn_cancel = ActionButton("전체취소", styles.BUTTON_RED_STYLE)
-        btn_cancel.setMinimumHeight(button_min_height)
-        btn_cancel.clicked.connect(self.clear_cart)
+        split_btns.setSpacing(styles.s(4))
+        split_btns.setContentsMargins(0, 0, 0, 0)
         
-        btn_wait = ActionButton("대기", styles.BUTTON_PURPLE_STYLE.replace(styles.PRIMARY_PURPLE, "#78909C")) # Grayish
-        btn_wait.setMinimumHeight(button_min_height)
+        btn_cancel = ActionButton("전체취소", style_cancel)
+        btn_cancel.clicked.connect(self.handle_all_cancel)
+        
+        btn_wait = ActionButton("대기", style_wait)
         btn_wait.clicked.connect(self.handle_wait_click)
         self.btn_wait = btn_wait
+        
         split_btns.addWidget(btn_cancel)
         split_btns.addWidget(btn_wait)
+        
+        # Set all buttons to expanding size policy so they fill the vertical height evenly
+        for btn in [btn_affiliate, btn_coupon, btn_card, btn_cash, btn_mobile_pay, btn_pay_select, btn_cancel, btn_wait]:
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            btn.setMinimumHeight(button_min_height)
+            
+        def create_separator():
+            sep = QLabel("▼")
+            sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            sep.setStyleSheet("color: #90A4AE; font-size: 11pt; font-weight: bold; border: none; background: transparent; margin: 1px 0;")
+            sep.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            sep.setFixedHeight(styles.s(15))
+            return sep
+
         right_layout.addWidget(btn_affiliate)
         right_layout.addWidget(btn_coupon)
+        right_layout.addWidget(create_separator())
         right_layout.addWidget(btn_card)
         right_layout.addWidget(btn_cash)
         right_layout.addWidget(btn_mobile_pay)
         right_layout.addWidget(btn_pay_select)
+        right_layout.addWidget(create_separator())
         right_layout.addLayout(split_btns)
         
         return right_layout
@@ -496,20 +641,28 @@ class POSMainWindow(QMainWindow):
         layout.setContentsMargins(10, 5, 10, 5)
         
         buttons = [
-            ("검수/폐기", styles.BUTTON_BOTTOM_STYLE),
+            ("", styles.BUTTON_BOTTOM_STYLE),
             ("수표조회", styles.BUTTON_BOTTOM_STYLE),
             ("영수증조회", styles.BUTTON_BOTTOM_STYLE),
             ("상품조회", styles.BUTTON_BOTTOM_STYLE),
-            ("판매보류/해제", styles.BUTTON_BOTTOM_STYLE),
-            ("서비스", styles.BUTTON_BOTTOM_STYLE),
-            ("통합조회", styles.BUTTON_BOTTOM_STYLE),
-            ("도움말", styles.BUTTON_BOTTOM_STYLE)
+            ("", styles.BUTTON_BOTTOM_STYLE),
+            ("", styles.BUTTON_BOTTOM_STYLE),
+            ("", styles.BUTTON_BOTTOM_STYLE),
+            ("", styles.BUTTON_BOTTOM_STYLE)
         ]
         
         for text, style in buttons:
             btn = QPushButton(text)
             btn.setStyleSheet(style)
             btn.setFixedHeight(styles.s(40))
+            if not text:
+                btn.setEnabled(False)
+            elif text == "상품조회":
+                btn.clicked.connect(self.open_product_inquiry_sales)
+            elif text == "수표조회":
+                btn.clicked.connect(self.open_check_inquiry)
+            elif text == "영수증조회":
+                btn.clicked.connect(lambda: self.switch_page(3))
             layout.addWidget(btn)
             
         return bottom_frame
@@ -555,10 +708,34 @@ class POSMainWindow(QMainWindow):
         self.update_table_view()
 
     def on_barcode_text_changed(self, text):
-        if len(text) >= 13:
+        for kor_prefix in ["ㅔ묘", "ㅖ묘", "ㅔ됴", "ㅖ됴"]:
+            if text.startswith(kor_prefix):
+                text = "pay" + text[len(kor_prefix):]
+                self.input_barcode.blockSignals(True)
+                self.input_barcode.setText(text)
+                self.input_barcode.blockSignals(False)
+                break
+
+        lower_text = text.lower()
+        if lower_text.startswith("pay"):
+            self.input_barcode.setStyleSheet(styles.BARCODE_INPUT_STYLE.replace("color: #333;", "color: white;"))
+        else:
+            self.input_barcode.setStyleSheet(styles.BARCODE_INPUT_STYLE)
+
+        should_submit = False
+        if lower_text.startswith("pay"):
+            digits_count = sum(1 for c in text[3:] if c.isdigit())
+            if digits_count >= 13:
+                should_submit = True
+        else:
+            if len(text) >= 13:
+                should_submit = True
+                
+        if should_submit:
             # Auto submit
             self.add_product(text.strip())
             self.input_barcode.clear()
+            self.input_barcode.setStyleSheet(styles.BARCODE_INPUT_STYLE)
             self.input_barcode.setFocus()
 
     def handle_barcode_input(self):
@@ -566,15 +743,485 @@ class POSMainWindow(QMainWindow):
         if barcode:
             self.add_product(barcode)
             self.input_barcode.clear()
+            self.input_barcode.setStyleSheet(styles.BARCODE_INPUT_STYLE)
             self.input_barcode.setFocus()
             
+    def get_voucher(self, barcode):
+        return self.product_manager.get_voucher(barcode)
+
+    def process_voucher(self, barcode, voucher):
+        target_barcode = voucher["product_barcode"]
+        target_product = self.product_manager.get_product(target_barcode)
+        if not target_product:
+            CustomMessageDialog("오류", "상품권 대상 상품이 등록되지 않았습니다.", 'warning', self).exec()
+            return
+
+        target_name = target_product["name"]
+        voucher_value = target_product["price"]
+
+        # Check if the target product is already in the cart
+        in_cart_qty = 0
+        for item in self.cart:
+            if item["barcode"] == target_barcode:
+                in_cart_qty += item["qty"]
+
+        if in_cart_qty > 0:
+            # Target product is in the cart! Apply payment directly.
+            self.apply_voucher_payment(barcode, target_name, voucher_value)
+        elif len(self.cart) == 0:
+            # Cart is empty. Automatically add the target product to the cart.
+            self.add_product(target_barcode)
+            # Apply payment directly.
+            self.apply_voucher_payment(barcode, target_name, voucher_value)
+        else:
+            # Cart is not empty, but target product is not in the cart.
+            # Show exchange dialog!
+            dialog = VoucherExchangeDialog(self)
+            if dialog.exec():
+                # User clicked "예 [반복/입력]" (Yes, exchange)
+                # Check if remaining payment amount is greater than or equal to voucher value
+                total_amt, total_disc, final_amt = self.get_cart_summary()
+                remaining = final_amt - self.total_paid
+                
+                if remaining < voucher_value:
+                    CustomMessageDialog("오류", f"상품권 금액({voucher_value:,}원) 이상의 상품을 스캔해 주세요.\n현재 결제 대상 금액: {remaining:,}원", 'warning', self).exec()
+                    return
+                
+                # Apply payment
+                self.apply_voucher_payment(barcode, target_name, voucher_value)
+            else:
+                # User clicked "아니오 [CLEAR]" (No, cancel)
+                return
+
+    def apply_voucher_payment(self, barcode, product_name, amount):
+        total_amt, total_disc, final_amt = self.get_cart_summary()
+        self.total_paid += amount
+        self.payments.append({
+            "method": "MobileVoucher",
+            "amount": amount,
+            "details": {"barcode": barcode, "product_name": product_name}
+        })
+        
+        if hasattr(self, 'btn_mobile_pay'):
+            self.btn_mobile_pay.set_checked(True)
+            
+        self.update_totals()
+        
+    def get_keeping_coupon(self, barcode):
+        import json
+        import os
+        keeping_file = os.path.join(os.path.abspath("."), "json", "keeping.json")
+        if os.path.exists(keeping_file):
+            try:
+                with open(keeping_file, "r", encoding="utf-8") as f:
+                    keeping_data = json.load(f)
+                return keeping_data.get(barcode)
+            except Exception:
+                return None
+        return None
+
+    def process_keeping_coupon(self, barcode, coupon):
+        target_barcode = coupon["product_barcode"]
+        target_product = self.product_manager.get_product(target_barcode)
+        if not target_product:
+            CustomMessageDialog("오류", "키핑쿠폰 대상 상품이 등록되지 않았습니다.", 'warning', self).exec()
+            return
+
+        target_name = target_product["name"]
+        coupon_value = target_product["price"]
+
+        # Check if the target product is already in the cart
+        in_cart_qty = 0
+        for item in self.cart:
+            if item["barcode"] == target_barcode:
+                in_cart_qty += item["qty"]
+
+        def apply_keeping_payment():
+            # Mark the coupon as used in keeping.json
+            import json
+            import os
+            keeping_file = os.path.join(os.path.abspath("."), "json", "keeping.json")
+            if os.path.exists(keeping_file):
+                try:
+                    with open(keeping_file, "r", encoding="utf-8") as f:
+                        keeping_data = json.load(f)
+                    if barcode in keeping_data:
+                        keeping_data[barcode]["status"] = "사용완료"
+                        with open(keeping_file, "w", encoding="utf-8") as f:
+                            json.dump(keeping_data, f, ensure_ascii=False, indent=4)
+                except Exception as e:
+                    print("Error updating keeping status:", str(e))
+
+            self.total_paid += coupon_value
+            self.payments.append({
+                "method": "KeepingCoupon",
+                "amount": coupon_value,
+                "details": {"barcode": barcode, "product_name": target_name}
+            })
+            if hasattr(self, 'btn_coupon'):
+                self.btn_coupon.set_checked(True)
+                
+            self.status_label.setText(f"키핑쿠폰 적용 완료: {target_name}")
+            self.update_totals()
+            
+            _, _, final_amt = self.get_cart_summary()
+            if self.total_paid >= final_amt:
+                self.finalize_transaction()
+
+        if in_cart_qty > 0:
+            apply_keeping_payment()
+        elif len(self.cart) == 0:
+            self.add_product(target_barcode)
+            apply_keeping_payment()
+        else:
+            dialog = VoucherExchangeDialog(self)
+            if dialog.exec():
+                _, _, final_amt = self.get_cart_summary()
+                remaining = final_amt - self.total_paid
+                if remaining < coupon_value:
+                    CustomMessageDialog("오류", f"쿠폰 금액({coupon_value:,}원) 이상의 상품을 스캔해 주세요.\n현재 결제 대상 금액: {remaining:,}원", 'warning', self).exec()
+                    return
+                apply_keeping_payment()
+
+    def open_keeping_dialog(self):
+        # Check if cart has keepable items (promo items with qty >= 2)
+        keepable_items = []
+        for item in self.cart:
+            product = self.product_manager.get_product(item["barcode"])
+            if product and product.get("promo_type", 0) in [1, 2]:
+                max_keepable = item["qty"] - 1
+                if max_keepable > 0:
+                    keepable_items.append((item, product, max_keepable))
+                
+        if not keepable_items:
+            CustomMessageDialog("키핑 불가", "장바구니에 키핑할 수 있는 행사 상품(수량 2개 이상)이 없습니다.", 'warning', self).exec()
+            return
+            
+        dialog = KeepingLookupDialog(self)
+        dialog.exec()
+        
+        if not dialog.result_value or not dialog.phone_number:
+            return
+            
+        phone = dialog.phone_number
+        
+        # Show KeepingCouponIssueDialog
+        issue_dialog = KeepingCouponIssueDialog(keepable_items, self)
+        if not issue_dialog.exec():
+            return
+            
+        # Process coupon issuance
+        import json
+        import os
+        import random
+        from datetime import datetime, timedelta
+        
+        keeping_file = os.path.join(os.path.abspath("."), "json", "keeping.json")
+        keeping_data = {}
+        if os.path.exists(keeping_file):
+            try:
+                with open(keeping_file, "r", encoding="utf-8") as f:
+                    keeping_data = json.load(f)
+            except Exception:
+                keeping_data = {}
+                
+        issued_coupons = []
+        
+        for item, product, max_keepable in keepable_items:
+            barcode = item["barcode"]
+            qty_to_issue = issue_dialog.result_quantities.get(barcode, 0)
+            if qty_to_issue <= 0:
+                continue
+                
+            name = product["name"]
+            
+            for _ in range(qty_to_issue):
+                while True:
+                    rand_part = "".join([str(random.randint(0, 9)) for _ in range(11)])
+                    keeping_barcode = f"98{rand_part}"
+                    if keeping_barcode not in keeping_data:
+                        break
+                        
+                issue_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                expiry_date = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
+                
+                coupon_info = {
+                    "phone": phone,
+                    "product_barcode": barcode,
+                    "product_name": name,
+                    "issue_date": issue_date,
+                    "expiry_date": expiry_date,
+                    "status": "사용가능"
+                }
+                
+                keeping_data[keeping_barcode] = coupon_info
+                
+                # Generate barcode image
+                barcode_img_src = self.receipt_manager.generate_barcode_base64(keeping_barcode)
+                spaced_barcode = " ".join([keeping_barcode[i:i+4] for i in range(0, len(keeping_barcode), 4)])
+                
+                # Image or fallback emoji
+                image_html = ""
+                import base64
+                import sys
+                try:
+                    base_path = sys._MEIPASS
+                except Exception:
+                    base_path = os.path.abspath(".")
+                image_path = None
+                for ext in ["png", "jpg", "jpeg", "webp"]:
+                    p = os.path.join(os.path.abspath("."), "photo", f"{barcode}.{ext}")
+                    if os.path.exists(p):
+                        image_path = p
+                        break
+                        
+                if not image_path:
+                    for ext in ["png", "jpg", "jpeg"]:
+                        p = os.path.join(base_path, "assets", f"{barcode}.{ext}")
+                        if os.path.exists(p):
+                            image_path = p
+                            break
+                        
+                if os.path.exists(image_path):
+                    try:
+                        with open(image_path, "rb") as f_img:
+                            img_b64 = base64.b64encode(f_img.read()).decode("utf-8")
+                        ext = "jpg" if image_path.endswith(".jpg") else "png"
+                        img_src = f"data:image/{ext};base64,{img_b64}"
+                        image_html = f'<img src="{img_src}" height="110" style="display: block;" />'
+                    except Exception:
+                        image_html = ""
+                        
+                if not image_html:
+                    CATEGORY_EMOJIS = {
+                        "snack": "🍪",
+                        "drink": "🥤",
+                        "candy": "🍭",
+                        "jelly": "🍬",
+                        "water": "🥛",
+                        "etc": "🎁",
+                        "핫바": "🍢",
+                        "식사류": "🍱",
+                        "면류": "🍜"
+                    }
+                    emoji = CATEGORY_EMOJIS.get(product.get("category", "etc"), "🎁")
+                    image_html = f'<div style="font-size: 64pt; line-height: 120px; text-align: center;">{emoji}</div>'
+                
+                issued_coupons.append({
+                    "barcode": keeping_barcode,
+                    "spaced_barcode": spaced_barcode,
+                    "barcode_img_src": barcode_img_src,
+                    "product_name": name,
+                    "image_html": image_html,
+                    "issue_date": issue_date,
+                    "expiry_date": expiry_date,
+                    "phone": phone
+                })
+        
+        if not issued_coupons:
+            return
+            
+        try:
+            with open(keeping_file, "w", encoding="utf-8") as f:
+                json.dump(keeping_data, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            CustomMessageDialog("저장 오류", f"키핑쿠폰 저장 중 오류가 발생했습니다: {str(e)}", 'warning', self).exec()
+            return
+            
+        # Render HTML with all coupons
+        coupons_cards_html = ""
+        for cp in issued_coupons:
+            coupons_cards_html += f"""
+            <div class="card-container" style="margin-bottom: 25px;">
+                <div class="card-header">
+                    <table align="center" border="0" cellpadding="0" cellspacing="0" style="width: 140px; height: 140px; background-color: #ffffff; border-radius: 12px;">
+                        <tr>
+                            <td align="center" valign="middle" style="height: 140px; width: 140px;">
+                                {cp["image_html"]}
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <div class="card-body">
+                    <div class="brand-name">CU</div>
+                    <div class="product-name">{cp["product_name"]}</div>
+                    <div class="coupon-type">DU 키핑쿠폰 (물품교환권)</div>
+                    
+                    <div class="pay-banner">
+                        발급 정보
+                    </div>
+                    
+                    <div class="info-row">· 휴대폰번호: {cp["phone"]}</div>
+                    <div class="info-row">· 발급 일시: {cp["issue_date"]}</div>
+                    <div class="info-row">· 유효 기간: ~ {cp["expiry_date"]}</div>
+                    
+                    <div class="barcode-box">
+                        <img src="{cp["barcode_img_src"]}" width="220" height="60" />
+                    </div>
+                    
+                    <div class="barcode-number-row">
+                        <span class="barcode-num">{cp["spaced_barcode"]}</span>
+                    </div>
+                </div>
+            </div>
+            """
+            
+        coupon_html = f"""
+        <html>
+        <head>
+            <style>
+                body {{
+                    font-family: 'Malgun Gothic', 'Dotum', sans-serif;
+                    background-color: #FAFAFA;
+                    margin: 0;
+                    padding: 10px;
+                }}
+                .card-container {{
+                    width: 320px;
+                    background-color: #ffffff;
+                    border: 1px solid #E0E0E0;
+                    border-radius: 12px;
+                    margin: 0 auto;
+                }}
+                .card-header {{
+                    background: #8E24AA;
+                    padding: 25px 0;
+                    border-top-left-radius: 11px;
+                    border-top-right-radius: 11px;
+                    text-align: center;
+                }}
+                .card-body {{
+                    padding: 20px;
+                    text-align: center;
+                    background-color: #FAFAFA;
+                    border-bottom-left-radius: 11px;
+                    border-bottom-right-radius: 11px;
+                }}
+                .brand-name {{
+                    font-size: 11pt;
+                    color: #888888;
+                    font-weight: bold;
+                    letter-spacing: 1.5px;
+                    margin-bottom: 5px;
+                }}
+                .product-name {{
+                    font-size: 15pt;
+                    font-weight: bold;
+                    color: #222222;
+                    margin-bottom: 5px;
+                    line-height: 1.3;
+                }}
+                .coupon-type {{
+                    font-size: 11pt;
+                    color: #8E24AA;
+                    font-weight: bold;
+                    margin-bottom: 15px;
+                }}
+                .pay-banner {{
+                    width: 85%;
+                    border-top: 1px solid #E0E0E0;
+                    border-bottom: 1px solid #E0E0E0;
+                    margin: 10px auto 20px auto;
+                    padding: 8px 0;
+                    font-size: 9.5pt;
+                    color: #757575;
+                    font-weight: 500;
+                }}
+                .info-row {{
+                    font-size: 9.5pt;
+                    color: #555555;
+                    margin: 4px 0;
+                    text-align: left;
+                    padding-left: 25px;
+                }}
+                .barcode-box {{
+                    background-color: #ffffff;
+                    border: 1px solid #EBEBEB;
+                    border-radius: 6px;
+                    padding: 12px 10px;
+                    display: inline-block;
+                    margin-top: 15px;
+                    margin-bottom: 10px;
+                }}
+                .barcode-number-row {{
+                    margin-top: 5px;
+                }}
+                .barcode-num {{
+                    font-size: 13pt;
+                    font-weight: bold;
+                    color: #333333;
+                    letter-spacing: 1.5px;
+                    font-family: 'Courier New', Courier, monospace;
+                    vertical-align: middle;
+                }}
+            </style>
+        </head>
+        <body>
+            {coupons_cards_html}
+        </body>
+        </html>
+        """
+        
+        # Show coupon image
+        ReceiptPreviewDialog(coupon_html, self, title="키핑쿠폰 발급 완료", height=780).exec()
+
+
     def add_product(self, barcode):
+        # Intercept pay barcode (starts with 'pay' case-insensitively or Korean equivalents)
+        for kor_prefix in ["ㅔ묘", "ㅖ묘", "ㅔ됴", "ㅖ됴"]:
+            if barcode.startswith(kor_prefix):
+                barcode = "pay" + barcode[len(kor_prefix):]
+                break
+
+        lower_bc = barcode.lower()
+        if lower_bc.startswith("pay"):
+            digits_part = "".join(c for c in barcode[3:] if c.isdigit())
+            if len(digits_part) == 13:
+                self.process_pay_barcode(barcode, digits_part)
+            else:
+                CustomMessageDialog("결제 오류", f"유효하지 않은 결제 바코드입니다.\n'pay' 뒤에 13자리 계좌번호를 입력해 주세요.\n(입력된 숫자: {len(digits_part)}자리)", 'warning', self).exec()
+            return
+
+        # Intercept keeping coupon barcode (starts with 98)
+        if barcode.startswith("98"):
+            coupon = self.get_keeping_coupon(barcode)
+            if coupon:
+                if coupon.get("status") == "사용완료":
+                    CustomMessageDialog("이미 사용됨", "이미 사용이 완료된 키핑쿠폰입니다.", 'warning', self).exec()
+                    return
+                self.process_keeping_coupon(barcode, coupon)
+                return
+            else:
+                CustomMessageDialog("쿠폰 없음", f"바코드[{barcode}]\n존재하지 않거나 유효하지 않은 키핑쿠폰입니다.", 'warning', self).exec()
+                return
+
+        voucher = self.get_voucher(barcode)
+        if voucher:
+            self.process_voucher(barcode, voucher)
+            return
+
         product = self.product_manager.get_product(barcode)
         if not product:
             # Show alert for product not found
             dialog = CustomMessageDialog("상품 없음", f"바코드[{barcode}]\n등록되지 않은 상품입니다.", 'warning', self)
             dialog.exec()
             # Clear input after alert
+            self.input_barcode.clear()
+            self.input_barcode.setFocus()
+            return
+
+        # Stock Check
+        current_stock = product.get("stock", 0)
+        # Calculate how many are already in cart
+        in_cart_qty = 0
+        for item in self.cart:
+            if item["barcode"] == barcode:
+                in_cart_qty = item["qty"]
+                break
+        
+        if current_stock <= in_cart_qty:
+            dialog = CustomMessageDialog("재고 부족", f"상품 [{product['name']}]의 재고가 부족합니다.\n현재 재고: {current_stock}", 'warning', self)
+            dialog.exec()
             self.input_barcode.clear()
             self.input_barcode.setFocus()
             return
@@ -590,8 +1237,76 @@ class POSMainWindow(QMainWindow):
         if not found:
             self.cart.append({"barcode": barcode, "qty": 1})
             
+        # Promotion Alert (TTS & On-screen inline highlight)
+        promo_type = product.get("promo_type", 0)
+        if promo_type in [1, 2]:
+            promo_name = "1+1" if promo_type == 1 else "2+1"
+            tts_name = "원플러스원" if promo_type == 1 else "투플러스원"
+            
+            # Highlight color (Red for 1+1, Orange for 2+1)
+            color = "#D32F2F" if promo_type == 1 else "#F59E0B"
+            self.lbl_promo_info.setStyleSheet(f"font-size: {styles.fs(22)}; font-weight: bold; color: {color}; margin-bottom: 5px;")
+            self.lbl_promo_info.setText(f"★ {promo_name} 행사 상품입니다! ★")
+            
+            # Load and display product image
+            img_path = None
+            for ext in ["png", "jpg", "jpeg", "webp"]:
+                p = os.path.join(os.path.abspath("."), "photo", f"{barcode}.{ext}")
+                if os.path.exists(p):
+                    img_path = p
+                    break
+            if not img_path:
+                for ext in ["png", "jpg", "jpeg"]:
+                    p = os.path.join(os.path.abspath("."), "assets", f"{barcode}.{ext}")
+                    if os.path.exists(p):
+                        img_path = p
+                        break
+            if img_path:
+                pixmap = QPixmap(img_path)
+                if not pixmap.isNull():
+                    self.lbl_promo_img.setPixmap(pixmap.scaled(styles.s(80), styles.s(80), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+                else:
+                    self.lbl_promo_img.clear()
+            else:
+                self.lbl_promo_img.clear()
+                
+            QApplication.processEvents() # Update UI to show text immediately
+            self.speak(f"{tts_name} 상품입니다.")
+            
+            # Clear message and image after 3 seconds
+            QTimer.singleShot(3000, lambda: (self.lbl_promo_info.setText(""), self.lbl_promo_img.clear()))
+        else:
+            self.lbl_promo_info.setText("")
+            self.lbl_promo_img.clear()
+
         self.update_table_view()
         self.update_totals()
+
+    def speak(self, text):
+        self.tts_queue.put(text)
+
+    def _tts_worker(self):
+        try:
+            import pyttsx3
+            import ctypes
+            # Initialize COM library for SAPI5 in this background thread
+            ctypes.windll.ole32.CoInitialize(None)
+            
+            engine = pyttsx3.init()
+            engine.setProperty('rate', 180)
+            
+            while True:
+                text = self.tts_queue.get()
+                if text is None:
+                    break
+                try:
+                    engine.say(text)
+                    engine.runAndWait()
+                except Exception:
+                    pass
+                self.tts_queue.task_done()
+        except Exception:
+            pass
 
     def update_table_view(self):
         self.table.setRowCount(len(self.cart))
@@ -606,13 +1321,22 @@ class POSMainWindow(QMainWindow):
             self.table.setItem(row, 1, QTableWidgetItem(product["name"]))
             # Qty
             self.table.setItem(row, 2, QTableWidgetItem(str(item["qty"])))
-            # Price
-            self.table.setItem(row, 3, QTableWidgetItem(f"{product['price']:,}"))
             # Amount
-            amt = product['price'] * item['qty']
+            price = product['price']
+            qty = item['qty']
+            promo_type = product.get("promo_type", 0)
+            
+            discount = 0
+            if promo_type == 1: # 1+1
+                discount = (qty // 2) * price
+            elif promo_type == 2: # 2+1
+                discount = (qty // 3) * price
+
+            amt = (price * qty) - discount
+            self.table.setItem(row, 3, QTableWidgetItem(f"{price:,}"))
             self.table.setItem(row, 4, QTableWidgetItem(f"{amt:,}"))
-            # Discount (0 for now)
-            self.table.setItem(row, 5, QTableWidgetItem("0"))
+            # Discount
+            self.table.setItem(row, 5, QTableWidgetItem(f"{discount:,}"))
             
             # Alignments
             for col in range(6):
@@ -627,14 +1351,34 @@ class POSMainWindow(QMainWindow):
                     
         self.table.scrollToBottom()
 
-    def update_totals(self):
-        total_qty = sum(item["qty"] for item in self.cart)
+    def get_cart_summary(self):
         total_amt = 0
         total_disc = 0
         for item in self.cart:
-             product = self.product_manager.get_product(item["barcode"])
-             if product:
-                 total_amt += product["price"] * item["qty"]
+            product = self.product_manager.get_product(item["barcode"])
+            if product:
+                price = product["price"]
+                qty = item["qty"]
+                promo_type = product.get("promo_type", 0)
+                
+                item_total = price * qty
+                item_disc = 0
+                if promo_type == 1: # 1+1
+                    item_disc = (qty // 2) * price
+                elif promo_type == 2: # 2+1
+                    item_disc = (qty // 3) * price
+                
+                total_amt += item_total
+                total_disc += item_disc
+        return total_amt, total_disc, total_amt - total_disc
+
+    def update_totals(self):
+        total_amt, total_disc, final_amt = self.get_cart_summary()
+        m_disc = getattr(self, "membership_discount", 0)
+        total_disc += m_disc
+        final_amt -= m_disc
+        
+        total_qty = sum(item["qty"] for item in self.cart)
         
         # Update Footer
         self.lbl_foot_qty.setText(str(total_qty))
@@ -642,13 +1386,14 @@ class POSMainWindow(QMainWindow):
         self.lbl_foot_disc.setText(f"{total_disc:,}")
         
         # Update Big Total (Payments Area)
-        self.lbl_final_price.setText(f"{(total_amt - self.total_paid):,}")
+        self.lbl_final_price.setText(f"{(final_amt - self.total_paid):,}")
         self.lbl_received_amount.setText(f"{self.total_paid:,}")
         self.lbl_change_amount.setText("0")
         
     def clear_cart(self):
         self.cart = []
         self.total_paid = 0
+        self.membership_discount = 0
         self.payments = []
         self.reset_wait_state()
         self.update_table_view()
@@ -661,6 +1406,15 @@ class POSMainWindow(QMainWindow):
         
         self.input_barcode.setFocus()
         
+    def handle_all_cancel(self):
+        if self.cart:
+            self.total_cancel_count += 1
+            self.transaction_manager.save_pos_stats(self.total_cancel_count, self.item_cancel_count)
+            self.clear_cart()
+            self.update_welcome_history()
+        else:
+            self.clear_cart()
+        
     def open_edit_dialog(self, row, col):
         if row < 0 or row >= len(self.cart):
             return
@@ -669,13 +1423,21 @@ class POSMainWindow(QMainWindow):
         barcode = item_data["barcode"]
         product = self.product_manager.get_product(barcode)
         
-        dialog = EditItemDialog(product["name"], item_data["qty"], self)
+        dialog = EditItemDialog(barcode, product, item_data["qty"], self.product_manager, self)
         
         if dialog.exec():
             if dialog.delete_clicked:
                 del self.cart[row]
+                self.item_cancel_count += 1
+                self.transaction_manager.save_pos_stats(self.total_cancel_count, self.item_cancel_count)
+                self.update_welcome_history()
             else:
                 new_qty = dialog.get_new_qty()
+                old_qty = self.cart[row]["qty"]
+                if new_qty < old_qty:
+                    self.item_cancel_count += 1
+                    self.transaction_manager.save_pos_stats(self.total_cancel_count, self.item_cancel_count)
+                    self.update_welcome_history()
                 self.cart[row]["qty"] = new_qty
             
             self.update_table_view()
@@ -688,12 +1450,45 @@ class POSMainWindow(QMainWindow):
         rand = "".join([str(random.randint(0, 9)) for _ in range(4)])
         return base + rand
 
+    def open_affiliate_discount(self):
+        total_amt, total_disc, final_amt = self.get_cart_summary()
+        remaining = final_amt - self.total_paid
+        
+        if final_amt == 0:
+            CustomMessageDialog("조회 불가", "결제할 상품이 없습니다.", 'warning', self).exec()
+            return
+            
+        dialog = AffiliateDiscountDialog(remaining, self)
+        # Position the dialog on the left side of the main window under the header
+        geom = self.geometry()
+        dialog.move(geom.x() + styles.s(10), geom.y() + styles.s(60))
+        if dialog.exec():
+            discount = dialog.discount_amount
+            points = dialog.points_used
+            issuer = dialog.card_issuer
+            
+            # Add membership discount
+            self.membership_discount = getattr(self, "membership_discount", 0) + discount
+            
+            # Log the discount payment
+            if discount > 0 or points > 0:
+                self.payments.append({
+                    "method": "Discount",
+                    "amount": discount,
+                    "details": {
+                        "issuer": issuer,
+                        "points_used": points,
+                        "card_number": dialog.card_number
+                    }
+                })
+            self.update_totals()
+
     def open_card_payment(self):
         # Calculate remaining total
-        full_total = sum(self.product_manager.get_product(item["barcode"])["price"] * item["qty"] for item in self.cart)
-        remaining = full_total - self.total_paid
+        total_amt, total_disc, final_amt = self.get_cart_summary()
+        remaining = final_amt - self.total_paid
         
-        if full_total == 0:
+        if final_amt == 0:
             CustomMessageDialog("결제 불가", "결제할 상품이 없습니다.", 'warning', self).exec()
             return
 
@@ -713,28 +1508,39 @@ class POSMainWindow(QMainWindow):
             CustomMessageDialog("알림", "이미 결제가 완료되었습니다.", 'info', self).exec()
             return
             
-        dialog = CreditCardPaymentDialog(remaining, self)
+        if not hasattr(self, 'firebase_mgr') or self.firebase_mgr is None:
+            try:
+                from firebase_manager import FirebaseManager
+                self.firebase_mgr = FirebaseManager()
+            except Exception:
+                self.firebase_mgr = None
+                
+        dialog = CreditCardPaymentDialog(remaining, self.firebase_mgr, self)
         if dialog.exec():
             paid_now = dialog.get_payment_amount()
             self.total_paid += paid_now
             self.payments.append({
                 "method": "Card",
                 "amount": paid_now,
-                "details": {"card_number": dialog.get_card_number()}
+                "details": {
+                    "card_number": dialog.get_card_number(),
+                    "balance_after": getattr(dialog, 'final_balance_after', 0.0)
+                }
             })
             if hasattr(self, 'btn_card'): self.btn_card.set_checked(True)
             self.update_totals()
             
             # If fully paid, finalize
-            if self.total_paid >= full_total:
+            if self.total_paid >= final_amt:
                 self.finalize_transaction()
+
 
     def open_cash_payment(self):
         # Calculate remaining total
-        full_total = sum(self.product_manager.get_product(item["barcode"])["price"] * item["qty"] for item in self.cart)
-        remaining = full_total - self.total_paid
+        total_amt, total_disc, final_amt = self.get_cart_summary()
+        remaining = final_amt - self.total_paid
         
-        if full_total == 0:
+        if final_amt == 0:
             CustomMessageDialog("결제 불가", "결제할 상품이 없습니다.", 'warning', self).exec()
             return
 
@@ -765,10 +1571,23 @@ class POSMainWindow(QMainWindow):
             change = max(0, paid_now - remaining)
             
             self.total_paid += cash_applied
+            
+            # Request Cash Receipt (현금영수증)
+            from payment_ui import CashReceiptDialog
+            receipt_dlg = CashReceiptDialog(cash_applied, paid_now, self)
+            receipt_id = ""
+            receipt_dlg.exec()
+            if receipt_dlg.receipt_issued:
+                receipt_id = receipt_dlg.receipt_id
+                
             self.payments.append({
                 "method": "Cash",
                 "amount": cash_applied,
-                "details": {"received_amt": paid_now, "change_amt": change}
+                "details": {
+                    "received_amt": paid_now, 
+                    "change_amt": change,
+                    "receipt_id": receipt_id
+                }
             })
             if hasattr(self, 'btn_cash'): self.btn_cash.set_checked(True)
             self.update_totals()
@@ -776,12 +1595,107 @@ class POSMainWindow(QMainWindow):
             if change > 0:
                 self.lbl_change_amount.setText(f"{change:,}")
             
-            if self.total_paid >= full_total:
+            if self.total_paid >= final_amt:
                 # If fully paid, finalize
                 self.finalize_transaction()
 
+    def process_pay_barcode(self, barcode, account_number):
+        total_amt, total_disc, final_amt = self.get_cart_summary()
+        remaining = final_amt - self.total_paid
+        
+        if final_amt == 0:
+            CustomMessageDialog("결제 불가", "결제할 상품이 없습니다.", 'warning', self).exec()
+            return
+
+        if remaining <= 0:
+            CustomMessageDialog("알림", "이미 결제가 완료되었습니다.", 'info', self).exec()
+            return
+
+        if not hasattr(self, 'firebase_mgr') or self.firebase_mgr is None:
+            from firebase_manager import FirebaseManager
+            self.firebase_mgr = FirebaseManager()
+            
+        from ui_components import BarcodePaymentProgressDialog
+        dialog = BarcodePaymentProgressDialog(self.firebase_mgr, account_number, remaining, self)
+        dialog.exec()
+        
+        success, message, balance = dialog.get_result()
+        
+        if success:
+            self.total_paid += remaining
+            self.payments.append({
+                "method": "MobilePay",
+                "amount": remaining,
+                "details": {
+                    "account_number": account_number,
+                    "balance_after": balance
+                }
+            })
+            if hasattr(self, 'btn_mobile_pay'): 
+                self.btn_mobile_pay.set_checked(True)
+            self.update_totals()
+            
+            # Finalize transaction directly
+            self.finalize_transaction()
+        else:
+            # Show a clean error message dialog
+            if "잔액" in message or "부족" in message:
+                CustomMessageDialog("승인 거절", "승인이 거절되었습니다.\n(잔액이 부족합니다.)", 'warning', self).exec()
+            else:
+                CustomMessageDialog("승인 거절", f"승인이 거절되었습니다.\n({message})", 'warning', self).exec()
+
+    def open_mobile_payment(self):
+        # Calculate remaining total
+        total_amt, total_disc, final_amt = self.get_cart_summary()
+        remaining = final_amt - self.total_paid
+        
+        if final_amt == 0:
+            CustomMessageDialog("결제 불가", "결제할 상품이 없습니다.", 'warning', self).exec()
+            return
+
+        # Toggle off if already paid
+        if hasattr(self, 'btn_mobile_pay') and self.btn_mobile_pay.is_checked:
+            # Find and remove the mobile payment from list
+            for i, p in enumerate(self.payments):
+                if p["method"] == "MobilePay":
+                    self.total_paid -= p["amount"]
+                    self.payments.pop(i)
+                    break
+            self.btn_mobile_pay.set_checked(False)
+            self.update_totals()
+            return
+
+        if remaining <= 0:
+            CustomMessageDialog("알림", "이미 결제가 완료되었습니다.", 'info', self).exec()
+            return
+            
+        from mobile_payment_dialog import MobilePaymentDialog
+        if not hasattr(self, 'firebase_mgr'):
+            from firebase_manager import FirebaseManager
+            self.firebase_mgr = FirebaseManager()
+            
+        dialog = MobilePaymentDialog(remaining, self.firebase_mgr, self)
+        if dialog.exec():
+            details = dialog.get_payment_details()
+            paid_now = details["amount"]
+            self.total_paid += paid_now
+            self.payments.append({
+                "method": "MobilePay",
+                "amount": paid_now,
+                "details": {
+                    "account_number": details["account_number"],
+                    "balance_after": details["balance_after"]
+                }
+            })
+            if hasattr(self, 'btn_mobile_pay'): self.btn_mobile_pay.set_checked(True)
+            self.update_totals()
+            
+            # If fully paid, finalize
+            if self.total_paid >= final_amt:
+                self.finalize_transaction()
+
     def finalize_transaction(self):
-        full_total = sum(self.product_manager.get_product(item["barcode"])["price"] * item["qty"] for item in self.cart)
+        total_amt, total_disc, final_amt = self.get_cart_summary()
         items_data = []
         for item in self.cart:
             prod = self.product_manager.get_product(item["barcode"])
@@ -790,6 +1704,8 @@ class POSMainWindow(QMainWindow):
                 "qty": item["qty"],
                 "price": prod["price"]
             })
+            # Deduct Stock
+            self.product_manager.reduce_stock(item["barcode"], item["qty"])
             
         tx_barcode = self.generate_tx_barcode()
         
@@ -799,7 +1715,8 @@ class POSMainWindow(QMainWindow):
         # Prepare transaction data for receipt generator
         tx_data = {
             "items": items_data,
-            "total_amt": full_total,
+            "total_amt": final_amt, # Use final amount
+            "total_discount": total_disc, # Add discount info
             "payment_method": primary_method,
             "payments": self.payments, # Full list of all partial payments
             "tx_barcode": tx_barcode
@@ -807,7 +1724,7 @@ class POSMainWindow(QMainWindow):
         
         self.transaction_manager.save_transaction(
             items=items_data,
-            total_amt=full_total,
+            total_amt=final_amt,
             payment_method=primary_method,
             payments=self.payments,
             tx_barcode=tx_barcode
@@ -822,7 +1739,6 @@ class POSMainWindow(QMainWindow):
         # Done
         self.clear_cart()
         self.go_to_home()
-        CustomMessageDialog("결제 완료", f"총 {full_total:,}원 결제가 완료되었습니다.", 'info', self).exec()
 
     def update_welcome_history(self):
         last_tx = self.transaction_manager.get_last_transaction()
@@ -832,6 +1748,11 @@ class POSMainWindow(QMainWindow):
         base_safe_amt = self.transaction_manager.get_base_safe_amt()
         cash_total = self.transaction_manager.get_cash_total()
         self.welcome_page.update_safe_balance(base_safe_amt + cash_total)
+        
+        # Update POS statistics
+        all_txs = self.transaction_manager.get_all_transactions()
+        refund_count = sum(1 for tx in all_txs if tx.get("status") == "Refunded")
+        self.welcome_page.update_statistics(refund_count, self.total_cancel_count, self.item_cancel_count)
 
     def handle_safe_balance_edit(self):
         current_total = self.transaction_manager.get_base_safe_amt() + self.transaction_manager.get_cash_total()
@@ -840,13 +1761,14 @@ class POSMainWindow(QMainWindow):
         
         if dialog.exec():
             amount = dialog.get_amount()
+            stored_amount = current_total - amount
             # New Base = New Total - Cash from transactions
             cash_total = self.transaction_manager.get_cash_total()
             new_base = amount - cash_total
             self.transaction_manager.set_base_safe_amt(new_base)
             self.update_welcome_history()
             
-            CustomMessageDialog("수정 완료", f"금고 보관 금액이 {amount:,}원으로 수정되었습니다.", 'info', self).exec()
+            CustomMessageDialog("보관 완료", f"금고 보관액 {stored_amount:,}원이 성공적으로 금고에 보관되었습니다.\n현재현금시재: {amount:,}원", 'info', self).exec()
 
     def handle_store_registration(self):
         store_info = {
@@ -893,17 +1815,76 @@ class POSMainWindow(QMainWindow):
         if len(barcode) != 16:
             return
             
-        result = self.transaction_manager.mark_as_refunded(barcode)
-        
-        if result == "Success":
-            CustomMessageDialog("환불 처리", "환불처리되었습니다.", 'info', self).exec()
-            self.update_welcome_history()
-        elif result == "AlreadyRefunded":
-            CustomMessageDialog("알림", "이미 환불 처리된 영수증입니다.", 'warning', self).exec()
-        elif result == "NotFound":
+        tx = self.transaction_manager.get_transaction_by_barcode(barcode)
+        if not tx:
             CustomMessageDialog("조회 실패", "해당 바코드의 영수증을 찾을 수 없습니다.", 'warning', self).exec()
+            return
+            
+        if tx.get("status") == "Refunded":
+            CustomMessageDialog("알림", "이미 환불 처리된 영수증입니다.", 'warning', self).exec()
+            return
+            
+        # Format the description of the transaction
+        items = tx.get("items", [])
+        if len(items) == 1:
+            items_desc = f"{items[0].get('name')} {items[0].get('qty')}개"
+        elif len(items) > 1:
+            items_desc = f"{items[0].get('name')} {items[0].get('qty')}개 외 {len(items)-1}건"
         else:
-            CustomMessageDialog("오류", "환불 처리 중 오류가 발생했습니다.", 'warning', self).exec()
+            items_desc = "상품 정보 없음"
+            
+        total_amt = tx.get("total_amt", 0)
+        pay_method = tx.get("payment_method", "결제")
+        
+        # Translate payment method
+        method_map = {"Card": "카드", "Cash": "현금", "MobilePay": "모바일페이"}
+        pay_method_ko = method_map.get(pay_method, pay_method)
+        
+        confirm_msg = (
+            f"선택된 영수증 정보:\n"
+            f"· 품목: {items_desc}\n"
+            f"· 금액: {total_amt:,}원 ({pay_method_ko})\n\n"
+            f"정말 환불 처리를 진행하시겠습니까?"
+        )
+        
+        confirm_dlg = CustomMessageDialog("영수증 환불 확인", confirm_msg, 'question', self)
+        confirm_dlg.exec()
+        
+        if confirm_dlg.result_value:
+            if not hasattr(self, 'firebase_mgr') or self.firebase_mgr is None:
+                from firebase_manager import FirebaseManager
+                self.firebase_mgr = FirebaseManager()
+                
+            from ui_components import BarcodeRefundProgressDialog
+            dialog = BarcodeRefundProgressDialog(
+                self.transaction_manager, 
+                self.firebase_mgr, 
+                barcode, 
+                total_amt, 
+                pay_method, 
+                tx, 
+                self
+            )
+            dialog.exec()
+            
+            success, message = dialog.get_result()
+            if success:
+                self.update_welcome_history()
+                CustomMessageDialog(
+                    "환불 완료", 
+                    f"영수증 환불 처리가 성공적으로 완료되었습니다.\n\n"
+                    f"· 환불 금액: {total_amt:,}원\n"
+                    f"· 결제 수단: {pay_method_ko} 반환 완료", 
+                    'info', 
+                    self
+                ).exec()
+            else:
+                CustomMessageDialog(
+                    "환불 실패", 
+                    f"환불 진행 중 오류가 발생했습니다:\n{message}", 
+                    'warning', 
+                    self
+                ).exec()
 
     def handle_wait_click(self):
         if not self.cart:
@@ -957,7 +1938,7 @@ class POSMainWindow(QMainWindow):
         self.welcome_page.update_wait_status(self.wait_slots)
         
         # Switch to Sales Page
-        self.central_stack.setCurrentIndex(1)
+        self.switch_page(1)
         self.update_table_view()
         self.update_totals()
 
