@@ -11,7 +11,7 @@ from ui_components import (ActionButton, StatusLabel, SummaryFrame, EditItemDial
                                CustomMessageDialog, SafeBalanceEditDialog, ReceiptPreviewDialog, StoreRegistrationDialog, PromotionDialog, VoucherExchangeDialog, KeepingLookupDialog, KeepingCouponIssueDialog, PromoAlertWithRelatedDialog)
 from product_manager import ProductManager
 from settings_page import SettingsPage
-from payment_ui import CreditCardPaymentDialog, CashPaymentDialog, CashReceiptDialog, AffiliateDiscountDialog
+from payment_ui import CreditCardPaymentDialog, CashPaymentDialog, CashReceiptDialog, AffiliateDiscountDialog, PaymentSelectDialog
 from welcome_page import WelcomePage
 from refund_page import RefundPage
 from receipt_inquiry_page import ReceiptInquiryPage
@@ -609,7 +609,7 @@ class POSMainWindow(QMainWindow):
         
         btn_affiliate = ActionButton("제휴 할인 및\n포인트 적립/사용", style_affiliate, "ⓟ")
         btn_affiliate.clicked.connect(self.open_affiliate_discount)
-        btn_coupon = ActionButton("CU키핑쿠폰 발급", style_coupon, "🎫")
+        btn_coupon = ActionButton("DU키핑쿠폰 발급", style_coupon, "🎫")
         btn_coupon.clicked.connect(self.open_keeping_dialog)
         
         btn_card = ActionButton("신용카드", style_card, "💳")
@@ -618,10 +618,11 @@ class POSMainWindow(QMainWindow):
         btn_cash = ActionButton("현금", style_cash, "🪙")
         btn_cash.clicked.connect(self.open_cash_payment)
         
-        btn_mobile_pay = ActionButton("모바일\n(미래에셋페이 등)", style_mobile, "📱")
+        btn_mobile_pay = ActionButton("모바일", style_mobile, "📱")
         btn_mobile_pay.clicked.connect(self.open_mobile_payment)
         
         btn_pay_select = ActionButton("결제선택", style_pay_select, "👛")
+        btn_pay_select.clicked.connect(self.open_payment_select)
 
         # Store references for multi-payment/state management
         self.btn_card = btn_card
@@ -1517,6 +1518,27 @@ class POSMainWindow(QMainWindow):
                     }
                 })
             self.update_totals()
+
+    def open_payment_select(self):
+        # Calculate remaining total
+        total_amt, total_disc, final_amt = self.get_cart_summary()
+        remaining = final_amt - self.total_paid
+        
+        if final_amt == 0:
+            CustomMessageDialog("결제 불가", "결제할 상품이 없습니다.", 'warning', self).exec()
+            return
+
+        if remaining <= 0:
+            CustomMessageDialog("알림", "이미 결제가 완료되었습니다.", 'info', self).exec()
+            return
+            
+        dialog = PaymentSelectDialog(self)
+        dialog.exec()
+        
+        # Finalize transaction if fully paid and not yet finalized
+        total_amt, total_disc, final_amt = self.get_cart_summary()
+        if self.cart and self.total_paid >= final_amt and final_amt > 0:
+            self.finalize_transaction()
 
     def open_card_payment(self):
         # Calculate remaining total

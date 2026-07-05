@@ -1575,11 +1575,23 @@ class CashReceiptDialog(QDialog):
         if os.path.exists(audio_path):
             from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
             from PyQt6.QtCore import QUrl
-            self.player = QMediaPlayer(self)
-            self.audio_output = QAudioOutput(self)
+            
+            main_win = parent
+            while main_win and not hasattr(main_win, 'clear_cart'):
+                if hasattr(main_win, 'parent') and main_win.parent():
+                    main_win = main_win.parent()
+                else:
+                    break
+            
+            self.player = QMediaPlayer()
+            self.audio_output = QAudioOutput()
             self.player.setAudioOutput(self.audio_output)
             self.player.setSource(QUrl.fromLocalFile(audio_path))
             self.player.play()
+            
+            if main_win:
+                main_win.active_audio_player = self.player
+                main_win.active_audio_output = self.audio_output
         
         # Main Container
         self.container = QFrame(self)
@@ -1995,7 +2007,19 @@ class CashReceiptDialog(QDialog):
         self.txt_identifier.setText(formatted)
         self.txt_identifier.blockSignals(False)
 
+    def stop_audio(self):
+        if hasattr(self, 'player') and self.player is not None:
+            try:
+                self.player.stop()
+            except Exception:
+                pass
+
+    def reject(self):
+        self.stop_audio()
+        super().reject()
+
     def process_no_receipt(self):
+        self.stop_audio()
         self.receipt_issued = False
         self.accept()
 
@@ -2007,6 +2031,7 @@ class CashReceiptDialog(QDialog):
             self.txt_identifier.setFocus()
             return
         
+        self.stop_audio()
         self.receipt_issued = True
         self.receipt_id = f"CU-{random.randint(100000, 999999)}"
         self.accept()
@@ -2723,5 +2748,546 @@ class CuPointUseConfirmDialog(QDialog):
     def process_use(self):
         self.use_points = True
         self.accept()
+
+
+class SimulatedPaymentDialog(QDialog):
+    def __init__(self, method_name, amount, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(styles.s(450), styles.s(280))
+        
+        self.method_name = method_name
+        self.amount = amount
+        self.success = False
+        
+        # Container
+        self.container = QFrame(self)
+        self.container.setGeometry(styles.s(10), styles.s(10), styles.s(430), styles.s(260))
+        self.container.setStyleSheet(f"""
+            QFrame {{
+                background-color: white;
+                border: 2px solid {styles.PRIMARY_PURPLE};
+                border-radius: 12px;
+            }}
+        """)
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(15)
+        shadow.setColor(QColor(0, 0, 0, 60))
+        self.container.setGraphicsEffect(shadow)
+        
+        layout = QVBoxLayout(self.container)
+        layout.setContentsMargins(styles.s(20), styles.s(20), styles.s(20), styles.s(20))
+        layout.setSpacing(styles.s(15))
+        
+        # Title
+        self.lbl_title = QLabel(f"{method_name} 결제 승인 요청")
+        self.lbl_title.setStyleSheet("font-size: 14pt; font-weight: bold; color: #37474F; font-family: 'Malgun Gothic';")
+        self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_title)
+        
+        # Status Label
+        self.lbl_status = QLabel("단말기에 카드를 접촉하거나\n바코드를 스캔해 주세요.")
+        self.lbl_status.setStyleSheet("font-size: 12pt; color: #546E7A; font-family: 'Malgun Gothic';")
+        self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_status)
+        
+        # Amount info
+        self.lbl_amt = QLabel(f"결제 금액: {amount:,}원")
+        self.lbl_amt.setStyleSheet("font-size: 13pt; font-weight: bold; color: #D32F2F;")
+        self.lbl_amt.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_amt)
+        
+        # Simulated progress bar / indicator
+        self.progress = QLabel("● ○ ○ ○ ○")
+        self.progress.setStyleSheet("font-size: 16pt; color: #7B68EE;")
+        self.progress.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.progress)
+        
+        # Timer to update steps and close
+        self.timer_step = 0
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.on_timer)
+        self.timer.start(400)
+        
+    def on_timer(self):
+        self.timer_step += 1
+        if self.timer_step == 1:
+            self.progress.setText("● ● ○ ○ ○")
+            self.lbl_status.setText("승인 요청 송신 중...")
+        elif self.timer_step == 2:
+            self.progress.setText("● ● ● ● ○")
+            self.lbl_status.setText("카드 승인 처리 중...")
+        elif self.timer_step == 3:
+            self.progress.setText("● ● ● ● ●")
+            self.lbl_status.setText("결제가 성공적으로 완료되었습니다!")
+            self.lbl_status.setStyleSheet("font-size: 12pt; color: #2E7D32; font-weight: bold;")
+            
+            try:
+                import winsound
+                winsound.Beep(2000, 150)
+            except Exception:
+                pass
+        elif self.timer_step >= 4:
+            self.timer.stop()
+            self.success = True
+            self.accept()
+
+
+class PaymentSelectDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(styles.s(1024), styles.s(680))
+        
+        # Main Container
+        self.container = QFrame(self)
+        self.container.setGeometry(styles.s(10), styles.s(10), styles.s(1004), styles.s(660))
+        self.container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {styles.WHITE};
+                border-radius: {styles.s(15)}px;
+                border: 2px solid {styles.PRIMARY_PURPLE};
+            }}
+        """)
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        shadow.setOffset(0, 5)
+        self.container.setGraphicsEffect(shadow)
+        
+        # Main Layout
+        main_layout = QHBoxLayout(self.container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        # 1. Left Sidebar
+        self.sidebar = QFrame()
+        self.sidebar.setFixedWidth(styles.s(240))
+        self.sidebar.setStyleSheet(f"""
+            QFrame {{
+                background-color: #1E2D3D;
+                border-top-left-radius: {styles.s(13)}px;
+                border-bottom-left-radius: {styles.s(13)}px;
+                border: none;
+            }}
+        """)
+        self.init_sidebar()
+        main_layout.addWidget(self.sidebar)
+        
+        # 2. Right Content Area
+        self.content_area = QFrame()
+        self.content_area.setStyleSheet("border: none; background-color: white; border-top-right-radius: 13px; border-bottom-right-radius: 13px;")
+        self.init_content()
+        main_layout.addWidget(self.content_area)
+        
+        # Update initially
+        self.update_amounts()
+
+    def init_sidebar(self):
+        layout = QVBoxLayout(self.sidebar)
+        layout.setContentsMargins(styles.s(20), styles.s(40), styles.s(20), styles.s(40))
+        layout.setSpacing(styles.s(30))
+        
+        # Step 1
+        self.step1_widget = QWidget()
+        s1_layout = QHBoxLayout(self.step1_widget)
+        s1_layout.setContentsMargins(0, 0, 0, 0)
+        s1_icon = QLabel("01")
+        s1_icon.setFixedSize(styles.s(40), styles.s(40))
+        s1_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        s1_icon.setStyleSheet("""
+            background-color: #455A64;
+            color: #CFD8DC;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14pt;
+        """)
+        s1_text = QLabel("제휴 할인 및\n포인트 적립/사용")
+        s1_text.setStyleSheet("color: #B0BEC5; font-size: 11pt; font-weight: bold; font-family: 'Malgun Gothic';")
+        s1_layout.addWidget(s1_icon)
+        s1_layout.addWidget(s1_text)
+        
+        # Step 2 (Active)
+        self.step2_widget = QWidget()
+        s2_layout = QHBoxLayout(self.step2_widget)
+        s2_layout.setContentsMargins(0, 0, 0, 0)
+        s2_icon = QLabel("02")
+        s2_icon.setFixedSize(styles.s(40), styles.s(40))
+        s2_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        s2_icon.setStyleSheet(f"""
+            background-color: {styles.PRIMARY_PURPLE};
+            color: white;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14pt;
+        """)
+        s2_text = QLabel("결제선택")
+        s2_text.setStyleSheet("color: white; font-size: 13pt; font-weight: bold; font-family: 'Malgun Gothic';")
+        s2_layout.addWidget(s2_icon)
+        s2_layout.addWidget(s2_text)
+        
+        # Step 3
+        self.step3_widget = QWidget()
+        s3_layout = QHBoxLayout(self.step3_widget)
+        s3_layout.setContentsMargins(0, 0, 0, 0)
+        s3_icon = QLabel("03")
+        s3_icon.setFixedSize(styles.s(40), styles.s(40))
+        s3_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        s3_icon.setStyleSheet("""
+            background-color: #455A64;
+            color: #CFD8DC;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14pt;
+        """)
+        s3_text = QLabel("결제완료")
+        s3_text.setStyleSheet("color: #B0BEC5; font-size: 11pt; font-weight: bold; font-family: 'Malgun Gothic';")
+        s3_layout.addWidget(s3_icon)
+        s3_layout.addWidget(s3_text)
+        
+        layout.addWidget(self.step1_widget)
+        
+        line1 = QFrame()
+        line1.setFixedWidth(2)
+        line1.setStyleSheet("background-color: #455A64;")
+        layout.addWidget(line1, alignment=Qt.AlignmentFlag.AlignCenter)
+        
+        layout.addWidget(self.step2_widget)
+        
+        line2 = QFrame()
+        line2.setFixedWidth(2)
+        line2.setStyleSheet("background-color: #455A64;")
+        layout.addWidget(line2, alignment=Qt.AlignmentFlag.AlignCenter)
+        
+        layout.addWidget(self.step3_widget)
+        layout.addStretch()
+
+    def init_content(self):
+        layout = QVBoxLayout(self.content_area)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # 1. Guide Bar
+        guide_bar = QFrame()
+        guide_bar.setFixedHeight(styles.s(50))
+        guide_bar.setStyleSheet("background-color: #ECEFF1; border-top-right-radius: 13px; border-bottom: 1px solid #CFD8DC;")
+        guide_layout = QHBoxLayout(guide_bar)
+        guide_layout.setContentsMargins(styles.s(20), 0, styles.s(20), 0)
+        
+        lbl_guide = QLabel("결제 바코드를 스캔 하거나 지불을 원하는 결제 수단을 선택 하세요.")
+        lbl_guide.setStyleSheet("color: #37474F; font-size: 12pt; font-weight: bold; font-family: 'Malgun Gothic';")
+        guide_layout.addWidget(lbl_guide)
+        
+        btn_close = QPushButton("X")
+        btn_close.setFixedSize(styles.s(30), styles.s(30))
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.setStyleSheet("""
+            QPushButton {
+                color: #555;
+                background: transparent;
+                font-weight: bold;
+                border: none;
+                font-size: 12pt;
+            }
+            QPushButton:hover {
+                background-color: rgba(0, 0, 0, 0.1);
+                border-radius: 15px;
+            }
+        """)
+        btn_close.clicked.connect(self.reject)
+        guide_layout.addWidget(btn_close)
+        
+        layout.addWidget(guide_bar)
+        
+        # Inner Content Panel
+        inner_panel = QWidget()
+        inner_layout = QVBoxLayout(inner_panel)
+        inner_layout.setContentsMargins(styles.s(30), styles.s(20), styles.s(30), styles.s(20))
+        inner_layout.setSpacing(styles.s(15))
+        
+        # 2. Affiliate/Point row
+        self.btn_aff_disc = QPushButton("✔️ 제휴 할인 및 포인트 적립/사용")
+        self.btn_aff_disc.setFixedHeight(styles.s(45))
+        self.btn_aff_disc.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_aff_disc.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #ECEFF1;
+                border: 1px solid #B0BEC5;
+                color: #37474F;
+                font-size: 11pt;
+                font-weight: bold;
+                text-align: left;
+                padding-left: 15px;
+                border-radius: 5px;
+            }}
+            QPushButton:hover {{
+                background-color: #CFD8DC;
+            }}
+        """)
+        self.btn_aff_disc.clicked.connect(self.trigger_affiliate)
+        inner_layout.addWidget(self.btn_aff_disc)
+        
+        # 3. Sum Info
+        sum_layout = QHBoxLayout()
+        self.lbl_sum_msg = QLabel("합계 ")
+        self.lbl_sum_msg.setStyleSheet("font-size: 16pt; font-family: 'Malgun Gothic'; color: #333;")
+        self.lbl_sum_val = QLabel("0")
+        self.lbl_sum_val.setStyleSheet("font-size: 20pt; font-weight: bold; font-family: 'Malgun Gothic'; color: #D32F2F;")
+        self.lbl_sum_tail = QLabel(" 원 입니다.")
+        self.lbl_sum_tail.setStyleSheet("font-size: 16pt; font-family: 'Malgun Gothic'; color: #333;")
+        
+        sum_layout.addWidget(self.lbl_sum_msg)
+        sum_layout.addWidget(self.lbl_sum_val)
+        sum_layout.addWidget(self.lbl_sum_tail)
+        sum_layout.addStretch()
+        inner_layout.addLayout(sum_layout)
+        
+        # 4. Payment Buttons Grid
+        grid_layout = QGridLayout()
+        grid_layout.setSpacing(styles.s(10))
+        
+        def create_pay_btn(text, callback, is_main=False):
+            btn = QPushButton(f"✔️ {text}")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            if is_main:
+                btn.setFixedHeight(styles.s(100))
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: #E3F2FD;
+                        border: 2px solid #1E88E5;
+                        color: #1565C0;
+                        font-size: 14pt;
+                        font-weight: bold;
+                        border-radius: 8px;
+                    }}
+                    QPushButton:hover {{ background-color: #BBDEFB; }}
+                    QPushButton:disabled {{
+                        background-color: #E0E0E0;
+                        color: #9E9E9E;
+                        border: 1px solid #BDBDBD;
+                    }}
+                """)
+            else:
+                btn.setFixedHeight(styles.s(55))
+                btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: #F5F5F5;
+                        border: 1px solid #B0BEC5;
+                        color: #37474F;
+                        font-size: 11pt;
+                        font-weight: bold;
+                        border-radius: 5px;
+                    }}
+                    QPushButton:hover {{ background-color: #ECEFF1; }}
+                    QPushButton:disabled {{
+                        background-color: #E0E0E0;
+                        color: #9E9E9E;
+                        border: 1px solid #BDBDBD;
+                    }}
+                """)
+            btn.clicked.connect(callback)
+            return btn
+
+        btn_credit_card = create_pay_btn("신용카드", self.trigger_card, is_main=True)
+        btn_transit_card = create_pay_btn("교통카드", lambda: self.trigger_simulated("교통카드"))
+        btn_mobile = create_pay_btn("모바일", self.trigger_mobile)
+        btn_gift = create_pay_btn("상품권", lambda: self.trigger_simulated("상품권"))
+        btn_school = create_pay_btn("급식카드/\n청소년바우처", lambda: self.trigger_simulated("급식카드/청소년바우처"))
+        
+        btn_ic_card = create_pay_btn("현금IC카드", lambda: self.trigger_simulated("현금IC카드"))
+        btn_employee_pt = create_pay_btn("제휴사\n임직원포인트", lambda: self.trigger_simulated("제휴사 임직원포인트"))
+        btn_bank = create_pay_btn("계좌이체", lambda: self.trigger_simulated("계좌이체"))
+        
+        # Disable unsupported buttons
+        btn_transit_card.setEnabled(False)
+        btn_gift.setEnabled(False)
+        btn_school.setEnabled(False)
+        btn_ic_card.setEnabled(False)
+        btn_employee_pt.setEnabled(False)
+        btn_bank.setEnabled(False)
+        
+        grid_layout.addWidget(btn_credit_card, 0, 0)
+        grid_layout.addWidget(btn_transit_card, 1, 0)
+        
+        grid_layout.addWidget(btn_mobile, 1, 1)
+        grid_layout.addWidget(btn_ic_card, 2, 1)
+        
+        grid_layout.addWidget(btn_gift, 1, 2)
+        grid_layout.addWidget(btn_employee_pt, 2, 2)
+        
+        grid_layout.addWidget(btn_school, 1, 3)
+        grid_layout.addWidget(btn_bank, 2, 3)
+        
+        inner_layout.addLayout(grid_layout)
+        inner_layout.addSpacing(styles.s(10))
+        
+        # 5. Bottom Cash row & Summary info
+        bottom_layout = QHBoxLayout()
+        bottom_layout.setSpacing(styles.s(20))
+        
+        cash_box = QFrame()
+        cash_box.setStyleSheet("background-color: #F5F5F5; border: 1px solid #CFD8DC; border-radius: 8px;")
+        cash_box_layout = QHBoxLayout(cash_box)
+        cash_box_layout.setContentsMargins(styles.s(15), styles.s(10), styles.s(15), styles.s(10))
+        cash_box_layout.setSpacing(styles.s(10))
+        
+        lbl_cash = QLabel("✔️ 현금결제")
+        lbl_cash.setStyleSheet("font-size: 11pt; font-weight: bold; color: #37474F;")
+        
+        self.txt_cash_amt = QLineEdit()
+        self.txt_cash_amt.setPlaceholderText("금액 입력")
+        self.txt_cash_amt.setFixedSize(styles.s(140), styles.s(36))
+        self.txt_cash_amt.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                border: 1px solid #B0BEC5;
+                border-radius: 4px;
+                padding-left: 8px;
+                font-size: 11pt;
+                font-weight: bold;
+                color: #333;
+            }
+        """)
+        
+        btn_cash_confirm = QPushButton("확인")
+        btn_cash_confirm.setFixedSize(styles.s(70), styles.s(36))
+        btn_cash_confirm.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_cash_confirm.setStyleSheet("""
+            QPushButton {
+                background-color: #37474F;
+                color: white;
+                font-size: 11pt;
+                font-weight: bold;
+                border-radius: 4px;
+            }
+            QPushButton:hover { background-color: #263238; }
+        """)
+        btn_cash_confirm.clicked.connect(self.trigger_cash)
+        
+        cash_box_layout.addWidget(lbl_cash)
+        cash_box_layout.addWidget(self.txt_cash_amt)
+        cash_box_layout.addWidget(btn_cash_confirm)
+        bottom_layout.addWidget(cash_box, stretch=3)
+        
+        summary_panel = QFrame()
+        summary_panel.setStyleSheet("background-color: #ECEFF1; border: 1px solid #CFD8DC; border-radius: 8px;")
+        summary_panel_layout = QGridLayout(summary_panel)
+        summary_panel_layout.setContentsMargins(styles.s(15), styles.s(10), styles.s(15), styles.s(10))
+        summary_panel_layout.setSpacing(styles.s(8))
+        
+        lbl_total_title = QLabel("총 금액")
+        lbl_total_title.setStyleSheet("font-size: 10pt; color: #546E7A; font-weight: bold;")
+        self.lbl_total_val = QLabel("0 원")
+        self.lbl_total_val.setStyleSheet("font-size: 11pt; color: #37474F; font-weight: bold;")
+        self.lbl_total_val.setAlignment(Qt.AlignmentFlag.AlignRight)
+        
+        lbl_paid_title = QLabel("결제한 금액")
+        lbl_paid_title.setStyleSheet("font-size: 10pt; color: #546E7A; font-weight: bold;")
+        self.lbl_paid_val = QLabel("0 원")
+        self.lbl_paid_val.setStyleSheet("font-size: 11pt; color: #37474F; font-weight: bold;")
+        self.lbl_paid_val.setAlignment(Qt.AlignmentFlag.AlignRight)
+        
+        lbl_rem_title = QLabel("받을 금액")
+        lbl_rem_title.setStyleSheet("font-size: 11pt; color: #37474F; font-weight: bold;")
+        self.lbl_rem_val = QLabel("0")
+        self.lbl_rem_val.setStyleSheet("font-size: 18pt; color: #D32F2F; font-weight: bold;")
+        self.lbl_rem_val.setAlignment(Qt.AlignmentFlag.AlignRight)
+        
+        summary_panel_layout.addWidget(lbl_total_title, 0, 0)
+        summary_panel_layout.addWidget(self.lbl_total_val, 0, 1)
+        summary_panel_layout.addWidget(lbl_paid_title, 1, 0)
+        summary_panel_layout.addWidget(self.lbl_paid_val, 1, 1)
+        summary_panel_layout.addWidget(lbl_rem_title, 2, 0)
+        summary_panel_layout.addWidget(self.lbl_rem_val, 2, 1)
+        
+        bottom_layout.addWidget(summary_panel, stretch=2)
+        
+        inner_layout.addLayout(bottom_layout)
+        layout.addWidget(inner_panel)
+
+    def update_amounts(self):
+        total_amt, total_disc, final_amt = self.parent().get_cart_summary()
+        remaining = final_amt - self.parent().total_paid
+        
+        self.lbl_sum_val.setText(f"{final_amt:,}")
+        self.lbl_total_val.setText(f"{final_amt:,} 원")
+        self.lbl_paid_val.setText(f"{self.parent().total_paid:,} 원")
+        self.lbl_rem_val.setText(f"{max(0, remaining):,}")
+        self.txt_cash_amt.setText(f"{max(0, remaining)}")
+
+    def trigger_affiliate(self):
+        self.parent().open_affiliate_discount()
+        self.update_amounts()
+        self.check_completion()
+        
+    def trigger_card(self):
+        self.parent().open_card_payment()
+        self.update_amounts()
+        self.check_completion()
+        
+    def trigger_mobile(self):
+        self.parent().open_mobile_payment()
+        self.update_amounts()
+        self.check_completion()
+        
+    def trigger_simulated(self, method_name):
+        CustomMessageDialog("결제 제한", f"'{method_name}'은(는) 현재 단말기에서 지원하지 않는 결제 수단입니다.", 'warning', self).exec()
+            
+    def trigger_cash(self):
+        val = self.txt_cash_amt.text().strip()
+        if not val:
+            return
+        try:
+            amount = int(val.replace(",", ""))
+        except ValueError:
+            return
+            
+        total_amt, total_disc, final_amt = self.parent().get_cart_summary()
+        remaining = final_amt - self.parent().total_paid
+        if remaining <= 0:
+            CustomMessageDialog("알림", "이미 결제가 완료되었습니다.", 'info', self).exec()
+            return
+            
+        cash_applied = min(amount, remaining)
+        change = max(0, amount - remaining)
+        
+        self.parent().total_paid += cash_applied
+        
+        receipt_dlg = CashReceiptDialog(cash_applied, amount, self)
+        receipt_id = ""
+        receipt_dlg.exec()
+        if receipt_dlg.receipt_issued:
+            receipt_id = receipt_dlg.receipt_id
+            
+        self.parent().payments.append({
+            "method": "Cash",
+            "amount": cash_applied,
+            "details": {
+                "received_amt": amount,
+                "change_amt": change,
+                "receipt_id": receipt_id
+            }
+        })
+        if hasattr(self.parent(), 'btn_cash'):
+            self.parent().btn_cash.set_checked(True)
+        self.parent().update_totals()
+        
+        if change > 0:
+            self.parent().lbl_change_amount.setText(f"{change:,}")
+            
+        self.update_amounts()
+        self.check_completion()
+        
+    def check_completion(self):
+        total_amt, total_disc, final_amt = self.parent().get_cart_summary()
+        if self.parent().total_paid >= final_amt or not self.parent().cart:
+            self.accept()
+
 
 

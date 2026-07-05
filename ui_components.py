@@ -1333,6 +1333,10 @@ class StoreRegistrationDialog(QDialog):
         }
         self.accept()
 
+    def get_store_info(self):
+        return self.new_info
+
+
 class ProductInquiryDialog(QDialog):
     def __init__(self, product_manager, sales_mode=False, parent=None):
         super().__init__(parent)
