@@ -115,6 +115,37 @@ class TransactionManager:
             print(f"Error marking transaction as refunded: {e}")
             return "Error"
 
+    def update_cash_receipt(self, tx_barcode, receipt_id):
+        try:
+            with open(self.file_path, 'r+', encoding='utf-8') as f:
+                data = json.load(f)
+                updated = False
+                for tx in data:
+                    if tx.get("tx_barcode") == tx_barcode:
+                        if "payment_details" not in tx or tx["payment_details"] is None:
+                            tx["payment_details"] = {}
+                        tx["payment_details"]["receipt_id"] = receipt_id
+                        
+                        payments = tx.get("payments", [])
+                        for p in payments:
+                            if p.get("method") == "Cash":
+                                if "details" not in p or p["details"] is None:
+                                    p["details"] = {}
+                                p["details"]["receipt_id"] = receipt_id
+                        
+                        updated = True
+                        break
+                
+                if updated:
+                    f.seek(0)
+                    json.dump(data, f, ensure_ascii=False, indent=4)
+                    f.truncate()
+                    return True
+                return False
+        except Exception as e:
+            print(f"Error updating cash receipt: {e}")
+            return False
+
     def get_transaction_by_barcode(self, barcode):
         try:
             with open(self.file_path, 'r', encoding='utf-8') as f:

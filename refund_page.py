@@ -58,7 +58,7 @@ class RefundPage(QWidget):
 
         # Single Receipt Image Display
         self.receipt_label = QLabel()
-        img_path = resource_path(os.path.join("assets", "cu_thermal_receipt_graphic.png"))
+        img_path = resource_path(os.path.join("assets", "image", "cu_thermal_receipt_graphic.png"))
         if os.path.exists(img_path):
             pixmap = QPixmap(img_path)
             # Scale to fit nicely while maintaining aspect ratio

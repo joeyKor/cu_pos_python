@@ -1570,6 +1570,17 @@ class CashReceiptDialog(QDialog):
         self.receipt_issued = False
         self.receipt_id = ""
         
+        import os
+        audio_path = os.path.abspath(os.path.join("assets", "audio", "현금.mp3"))
+        if os.path.exists(audio_path):
+            from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+            from PyQt6.QtCore import QUrl
+            self.player = QMediaPlayer(self)
+            self.audio_output = QAudioOutput(self)
+            self.player.setAudioOutput(self.audio_output)
+            self.player.setSource(QUrl.fromLocalFile(audio_path))
+            self.player.play()
+        
         # Main Container
         self.container = QFrame(self)
         self.container.setGeometry(styles.s(10), styles.s(10), styles.s(660), styles.s(500))

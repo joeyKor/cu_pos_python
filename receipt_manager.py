@@ -25,6 +25,9 @@ class ReceiptManager:
                     self.address = data.get("address", self.default_info["address"])
                     self.owner = data.get("owner", self.default_info["owner"])
                     self.tel = data.get("tel", self.default_info["tel"])
+                    
+                    import styles
+                    styles.BEEP_ENABLED = data.get("beep_enabled", True)
             except Exception as e:
                 print(f"Error loading store info: {e}")
                 self._set_defaults()
@@ -38,14 +41,18 @@ class ReceiptManager:
         self.address = self.default_info["address"]
         self.owner = self.default_info["owner"]
         self.tel = self.default_info["tel"]
+        import styles
+        styles.BEEP_ENABLED = True
 
     def save_store_info(self):
+        import styles
         data = {
             "store_name": self.store_name,
             "biz_num": self.biz_num,
             "address": self.address,
             "owner": self.owner,
-            "tel": self.tel
+            "tel": self.tel,
+            "beep_enabled": getattr(styles, "BEEP_ENABLED", True)
         }
         try:
             with open(self.config_path, "w", encoding="utf-8") as f:

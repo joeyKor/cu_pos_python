@@ -484,7 +484,7 @@ class ProductInquiryPage(QWidget):
             self.txt_order_status.clear()
             
             base_dir = os.path.dirname(os.path.abspath(__file__))
-            img_path = os.path.join(base_dir, "assets", "cu_mascot_fullbody_white_background_1767715363864.png")
+            img_path = os.path.join(base_dir, "assets", "image", "cu_mascot_fullbody_white_background_1767715363864.png")
             pixmap = QPixmap(img_path)
             if not pixmap.isNull():
                 self.lbl_product_image.setPixmap(pixmap.scaled(180, 200, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
@@ -539,13 +539,13 @@ class ProductInquiryPage(QWidget):
                 
         if not img_path:
             for ext in ["png", "jpg", "jpeg"]:
-                p = os.path.join(base_dir, "assets", f"{barcode}.{ext}")
+                p = os.path.join(base_dir, "assets", "image", f"{barcode}.{ext}")
                 if os.path.exists(p):
                     img_path = p
                     break
                     
         if not img_path:
-            img_path = os.path.join(base_dir, "assets", "cu_mascot_fullbody_white_background_1767715363864.png")
+            img_path = os.path.join(base_dir, "assets", "image", "cu_mascot_fullbody_white_background_1767715363864.png")
             
         pixmap = QPixmap(img_path)
         if not pixmap.isNull():

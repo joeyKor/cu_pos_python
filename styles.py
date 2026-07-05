@@ -23,6 +23,9 @@ FONT_FAMILY = "Malgun Gothic"
 # Scaling support
 SCALE_FACTOR = 1.0
 
+# Sound Settings
+BEEP_ENABLED = True
+
 def s(px):
     """ Scales a pixel value (int) """
     if isinstance(px, (int, float)):

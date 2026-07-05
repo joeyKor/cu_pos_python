@@ -25,6 +25,41 @@ from transaction_manager import TransactionManager
 from receipt_manager import ReceiptManager
 from post_payment_page import PostPaymentPage, PostPaymentOptionDialog
 
+# Globally monkey-patch QPushButton to play an asynchronous beep sound on click
+import threading
+import winsound
+import time
+
+last_beep_timestamp = 0
+beep_lock = threading.Lock()
+
+def play_beep_async(event_timestamp):
+    global last_beep_timestamp
+    if not getattr(styles, "BEEP_ENABLED", True):
+        return
+    with beep_lock:
+        if event_timestamp - last_beep_timestamp < 250: # 250ms Cooldown
+            return
+        last_beep_timestamp = event_timestamp
+        
+    def beep():
+        try:
+            winsound.Beep(2000, 80)
+        except Exception:
+            pass
+    threading.Thread(target=beep, daemon=True).start()
+
+original_mousePressEvent = QPushButton.mousePressEvent
+def patched_mousePressEvent(self, event):
+    ts = getattr(event, "timestamp", None)
+    if ts:
+        event_timestamp = ts()
+    else:
+        event_timestamp = int(time.time() * 1000)
+    play_beep_async(event_timestamp)
+    original_mousePressEvent(self, event)
+QPushButton.mousePressEvent = patched_mousePressEvent
+
 class POSMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -1946,7 +1981,7 @@ class POSMainWindow(QMainWindow):
         # Logic for "직전거래" button on post-payment page
         last_tx = self.transaction_manager.get_last_transaction()
         if last_tx:
-            dialog = PostPaymentOptionDialog(self)
+            dialog = PostPaymentOptionDialog(last_tx, self)
             dialog.exec()
         else:
             CustomMessageDialog("알림", "직전 거래 내역이 없습니다.", 'warning', self).exec()
@@ -1955,7 +1990,7 @@ class POSMainWindow(QMainWindow):
         # Logic for barcode scan on post-payment page
         tx = self.transaction_manager.get_transaction_by_barcode(barcode)
         if tx:
-            dialog = PostPaymentOptionDialog(self)
+            dialog = PostPaymentOptionDialog(tx, self)
             dialog.exec()
         else:
             CustomMessageDialog("조회 실패", f"바코드[{barcode}]에 해당하는 거래가 없습니다.", 'warning', self).exec()

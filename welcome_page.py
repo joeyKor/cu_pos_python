@@ -64,7 +64,7 @@ class WelcomePage(QWidget):
         # Universal White background to eliminate color mismatches
         header_frame.setStyleSheet("background-color: white; border: none;")
         
-        base_path = "assets"
+        base_path = os.path.join("assets", "image")
         store_img = resource_path(os.path.join(base_path, "cu_store_recreated_v1_1767798621656.png"))
         mascot_img = resource_path(os.path.join(base_path, "cu_mascot_fullbody_white_background_1767715363864.png"))
 
@@ -617,3 +617,10 @@ class WelcomePage(QWidget):
         self.lbl_stat_refund.setText(f"{refund_cnt}건")
         self.lbl_stat_total_cancel.setText(f"{total_cancel_cnt}건")
         self.lbl_stat_item_cancel.setText(f"{item_cancel_cnt}건")
+
+    def play_beep(self):
+        try:
+            import winsound
+            winsound.Beep(2000, 120)
+        except Exception:
+            pass

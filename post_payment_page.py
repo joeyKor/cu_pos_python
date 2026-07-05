@@ -181,8 +181,9 @@ class PostPaymentPage(QWidget):
         self.barcode_input.setFocus()
 
 class PostPaymentOptionDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, tx_data, parent=None):
         super().__init__(parent)
+        self.tx_data = tx_data
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setModal(True)
         self.init_ui()
@@ -279,6 +280,7 @@ class PostPaymentOptionDialog(QDialog):
         self.btn_discount = create_option_button("제휴할인", "💳")
         self.btn_points = create_option_button("포인트 적립", "💎")
         self.btn_receipt = create_option_button("현금영수증", "📄", "#5C6BC0")
+        self.btn_receipt.clicked.connect(self.handle_receipt_clicked)
 
         btn_row.addWidget(self.btn_discount)
         btn_row.addWidget(self.btn_points)
@@ -310,6 +312,33 @@ class PostPaymentOptionDialog(QDialog):
         body_layout.addLayout(bottom_layout)
         
         layout.addWidget(body)
+
+    def handle_receipt_clicked(self):
+        payments = self.tx_data.get("payments", [])
+        cash_amt = 0
+        if payments:
+            for p in payments:
+                if p.get("method") == "Cash":
+                    cash_amt += p.get("amount", 0)
+        else:
+            if self.tx_data.get("payment_method") == "Cash":
+                cash_amt = self.tx_data.get("total_amt", 0)
+                
+        if cash_amt <= 0:
+            from ui_components import CustomMessageDialog
+            CustomMessageDialog("발급 불가", "현금으로 결제한 금액이 없습니다.\n현금 결제건만 현금영수증 발급이 가능합니다.", 'warning', self).exec()
+            return
+            
+        from payment_ui import CashReceiptDialog
+        dialog = CashReceiptDialog(cash_amt, cash_amt, self)
+        if dialog.exec():
+            if dialog.receipt_issued and dialog.receipt_id:
+                tx_barcode = self.tx_data.get("tx_barcode")
+                if tx_barcode and self.parent():
+                    self.parent().transaction_manager.update_cash_receipt(tx_barcode, dialog.receipt_id)
+                from ui_components import CustomMessageDialog
+                CustomMessageDialog("발급 완료", f"현금영수증이 발급되었습니다.\n승인번호: {dialog.receipt_id}", 'info', self).exec()
+                self.accept()
 
     def mousePressEvent(self, event):
         # Allow dragging if needed, or just let it be

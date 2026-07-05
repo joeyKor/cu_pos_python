@@ -145,7 +145,7 @@ class LargeCheckDialog(QDialog):
         
         # Image
         lbl_img = QLabel()
-        img_path = resource_path(os.path.join("assets", "check_specimen.png"))
+        img_path = resource_path(os.path.join("assets", "image", "check_specimen.png"))
         pixmap = QPixmap(img_path)
         if not pixmap.isNull():
             lbl_img.setPixmap(pixmap.scaled(styles.s(960), styles.s(340), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
@@ -310,7 +310,7 @@ class CheckInquiryPage(QWidget):
         
         # Guide Illustration Image at top
         lbl_img = QLabel()
-        img_path = resource_path(os.path.join("assets", "check_specimen.png"))
+        img_path = resource_path(os.path.join("assets", "image", "check_specimen.png"))
         pixmap = QPixmap(img_path)
         if not pixmap.isNull():
             lbl_img.setPixmap(pixmap.scaled(styles.s(750), styles.s(260), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))

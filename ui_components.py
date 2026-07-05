@@ -551,7 +551,7 @@ class PromoAlertWithRelatedDialog(QDialog):
                         break
                 if not img_path:
                     # Fallback to default mascot
-                    img_path = resource_path(os.path.join("assets", "cu_mascot_fullbody_white_background_1767715363864.png"))
+                    img_path = resource_path(os.path.join("assets", "image", "cu_mascot_fullbody_white_background_1767715363864.png"))
                     
                 pixmap = QPixmap(img_path)
                 if not pixmap.isNull():
@@ -1182,13 +1182,13 @@ class StoreRegistrationDialog(QDialog):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(500, 550)
+        self.setFixedSize(500, 620)
         
         self.store_info = store_info
         
         # Main Container
         self.container = QFrame(self)
-        self.container.setGeometry(10, 10, 480, 530)
+        self.container.setGeometry(10, 10, 480, 600)
         self.container.setStyleSheet(f"""
             QFrame {{
                 background-color: {styles.WHITE};
@@ -1260,6 +1260,24 @@ class StoreRegistrationDialog(QDialog):
         self.edit_owner = add_input_row("대표자명 (Owner)", store_info.get("owner", ""))
         self.edit_tel = add_input_row("전화번호 (Tel)", store_info.get("tel", ""))
         
+        # Beep Sound Setting Checkbox
+        from PyQt6.QtWidgets import QCheckBox
+        self.cb_beep = QCheckBox("버튼 클릭 기계음(\"삐\" 소리) 사용")
+        self.cb_beep.setChecked(getattr(styles, "BEEP_ENABLED", True))
+        self.cb_beep.setStyleSheet("""
+            QCheckBox {
+                font-size: 11pt;
+                font-weight: bold;
+                color: #374151;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 20px;
+                height: 20px;
+            }
+        """)
+        content_layout.addWidget(self.cb_beep)
+        
         layout.addLayout(content_layout)
         layout.addStretch()
         
@@ -1303,12 +1321,15 @@ class StoreRegistrationDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def process_save(self):
+        import styles
+        styles.BEEP_ENABLED = self.cb_beep.isChecked()
         self.new_info = {
             "store_name": self.edit_name.text().strip(),
             "biz_num": self.edit_biz.text().strip(),
             "address": self.edit_addr.text().strip(),
             "owner": self.edit_owner.text().strip(),
-            "tel": self.edit_tel.text().strip()
+            "tel": self.edit_tel.text().strip(),
+            "beep_enabled": self.cb_beep.isChecked()
         }
         self.accept()
 
@@ -1788,7 +1809,7 @@ class ProductInquiryDialog(QDialog):
             self.txt_minor_status.clear()
             self.txt_order_status.clear()
             # Mascot placeholder
-            img_path = resource_path(os.path.join("assets", "cu_mascot_fullbody_white_background_1767715363864.png"))
+            img_path = resource_path(os.path.join("assets", "image", "cu_mascot_fullbody_white_background_1767715363864.png"))
             pixmap = QPixmap(img_path)
             self.lbl_product_image.setPixmap(pixmap.scaled(styles.s(160), styles.s(180), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
             return
@@ -1841,13 +1862,13 @@ class ProductInquiryDialog(QDialog):
                 
         if not img_path:
             for ext in ["png", "jpg", "jpeg"]:
-                p = resource_path(os.path.join("assets", f"{barcode}.{ext}"))
+                p = resource_path(os.path.join("assets", "image", f"{barcode}.{ext}"))
                 if os.path.exists(p):
                     img_path = p
                     break
                     
         if not img_path:
-            img_path = resource_path(os.path.join("assets", "cu_mascot_fullbody_white_background_1767715363864.png"))
+            img_path = resource_path(os.path.join("assets", "image", "cu_mascot_fullbody_white_background_1767715363864.png"))
             
         pixmap = QPixmap(img_path)
         if not pixmap.isNull():
@@ -2108,7 +2129,7 @@ class KeepingLookupDialog(QDialog):
         img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Let's try loading cu_receipt_scan_illustration or mascot image
-        ill_path = resource_path(os.path.join("assets", "cu_receipt_scan_illustration.png"))
+        ill_path = resource_path(os.path.join("assets", "image", "cu_receipt_scan_illustration.png"))
         if os.path.exists(ill_path):
             pixmap = QPixmap(ill_path)
             # Scale to fit
