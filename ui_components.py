@@ -551,7 +551,7 @@ class PromoAlertWithRelatedDialog(QDialog):
                         break
                 if not img_path:
                     # Fallback to default mascot
-                    img_path = resource_path(os.path.join("assets", "image", "cu_mascot_fullbody_white_background_1767715363864.png"))
+                    img_path = resource_path(os.path.join("assets", "image", "du_mascot_fullbody_white_background_1767715363864.png"))
                     
                 pixmap = QPixmap(img_path)
                 if not pixmap.isNull():
@@ -754,6 +754,121 @@ class CustomMessageDialog(QDialog):
     def reject_dialog(self):
         self.result_value = False
         self.reject()
+
+class PasswordInputDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(400, 260)
+        
+        self.container = QFrame(self)
+        self.container.setGeometry(10, 10, 380, 240)
+        self.container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {styles.WHITE};
+                border-radius: 15px;
+                border: 1px solid {styles.BORDER_COLOR};
+            }}
+        """)
+        
+        # Shadow effect
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        shadow.setOffset(0, 5)
+        self.container.setGraphicsEffect(shadow)
+        
+        layout = QVBoxLayout(self.container)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+        
+        # Title
+        self.lbl_title = QLabel("비밀번호 확인")
+        self.lbl_title.setStyleSheet(f"color: {styles.PRIMARY_PURPLE}; font-size: 16pt; font-weight: bold; font-family: 'Malgun Gothic';")
+        self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_title)
+        
+        # Message/Prompt
+        self.lbl_prompt = QLabel("설정 페이지에 진입하려면 비밀번호를 입력해 주세요.")
+        self.lbl_prompt.setStyleSheet(f"color: {styles.TEXT_COLOR}; font-size: 10pt; font-family: 'Malgun Gothic';")
+        self.lbl_prompt.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.lbl_prompt)
+        
+        # Input Field
+        self.txt_password = QLineEdit()
+        self.txt_password.setEchoMode(QLineEdit.EchoMode.Password)
+        self.txt_password.setPlaceholderText("비밀번호 4자리")
+        self.txt_password.setMaxLength(4)
+        self.txt_password.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.txt_password.setStyleSheet(f"""
+            QLineEdit {{
+                border: 1px solid {styles.BORDER_COLOR};
+                border-radius: 8px;
+                padding: 8px;
+                font-size: 14pt;
+                font-family: 'Malgun Gothic';
+                font-weight: bold;
+            }}
+            QLineEdit:focus {{
+                border: 2px solid {styles.PRIMARY_PURPLE};
+            }}
+        """)
+        layout.addWidget(self.txt_password)
+        
+        # Buttons Row
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
+        
+        self.btn_confirm = QPushButton("확인")
+        self.btn_confirm.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_confirm.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {styles.PRIMARY_PURPLE};
+                color: white;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 11pt;
+                font-weight: bold;
+                font-family: 'Malgun Gothic';
+            }}
+            QPushButton:hover {{ background-color: #6D28D9; }}
+        """)
+        self.btn_confirm.clicked.connect(self.check_password)
+        
+        self.btn_cancel = QPushButton("취소")
+        self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_cancel.setStyleSheet(f"""
+            QPushButton {{
+                background-color: white;
+                color: #4B5563;
+                border: 1px solid #D1D5DB;
+                border-radius: 8px;
+                padding: 10px;
+                font-size: 11pt;
+                font-weight: bold;
+                font-family: 'Malgun Gothic';
+            }}
+            QPushButton:hover {{ background-color: #F3F4F6; }}
+        """)
+        self.btn_cancel.clicked.connect(self.reject)
+        
+        btn_layout.addWidget(self.btn_confirm, stretch=1)
+        btn_layout.addWidget(self.btn_cancel, stretch=1)
+        layout.addLayout(btn_layout)
+        
+        # Enter key triggers confirm
+        self.txt_password.returnPressed.connect(self.check_password)
+        self.txt_password.setFocus()
+        
+    def check_password(self):
+        pw = self.txt_password.text().strip()
+        if pw == "0000":
+            self.accept()
+        else:
+            CustomMessageDialog("오류", "비밀번호가 올바르지 않습니다.", 'warning', self).exec()
+            self.txt_password.clear()
+            self.txt_password.setFocus()
 
 class SafeBalanceEditDialog(QDialog):
     def __init__(self, current_amount, parent=None):
@@ -1813,7 +1928,7 @@ class ProductInquiryDialog(QDialog):
             self.txt_minor_status.clear()
             self.txt_order_status.clear()
             # Mascot placeholder
-            img_path = resource_path(os.path.join("assets", "image", "cu_mascot_fullbody_white_background_1767715363864.png"))
+            img_path = resource_path(os.path.join("assets", "image", "du_mascot_fullbody_white_background_1767715363864.png"))
             pixmap = QPixmap(img_path)
             self.lbl_product_image.setPixmap(pixmap.scaled(styles.s(160), styles.s(180), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
             return
@@ -1872,7 +1987,7 @@ class ProductInquiryDialog(QDialog):
                     break
                     
         if not img_path:
-            img_path = resource_path(os.path.join("assets", "image", "cu_mascot_fullbody_white_background_1767715363864.png"))
+            img_path = resource_path(os.path.join("assets", "image", "du_mascot_fullbody_white_background_1767715363864.png"))
             
         pixmap = QPixmap(img_path)
         if not pixmap.isNull():
@@ -2133,14 +2248,14 @@ class KeepingLookupDialog(QDialog):
         img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Let's try loading cu_receipt_scan_illustration or mascot image
-        ill_path = resource_path(os.path.join("assets", "image", "cu_receipt_scan_illustration.png"))
+        ill_path = resource_path(os.path.join("assets", "image", "du_receipt_scan_illustration.png"))
         if os.path.exists(ill_path):
             pixmap = QPixmap(ill_path)
             # Scale to fit
             scaled_pixmap = pixmap.scaled(150, 130, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             img_label.setPixmap(scaled_pixmap)
         else:
-            img_label.setText("CU Scanner")
+            img_label.setText("DU Scanner")
             img_label.setStyleSheet("background-color: #CBD5E0; color: #4A5568; font-weight: bold; border-radius: 6px; border: none;")
             
         dark_layout.addWidget(img_label)
@@ -2155,15 +2270,15 @@ class KeepingLookupDialog(QDialog):
         lbl_prompt.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         right_column.addWidget(lbl_prompt)
         
-        # PocketCU QR Info and KakaoTalk Info
+        # PocketDU QR Info and KakaoTalk Info
         info_row = QHBoxLayout()
         info_row.setSpacing(10)
         
-        # PocketCU Text
+        # PocketDU Text
         lbl_pocketcu = QLabel(
-            "<b>[포켓CU QR]</b><br>"
-            "· 포인트 적립은 결제단계에서 포켓CU QR 한번 더 스캔!<br>"
-            "· 포켓CU QR 간편결제시 결제+적립 한번에!"
+            "<b>[포켓DU QR]</b><br>"
+            "· 포인트 적립은 결제단계에서 포켓DU QR 한번 더 스캔!<br>"
+            "· 포켓DU QR 간편결제시 결제+적립 한번에!"
         )
         lbl_pocketcu.setStyleSheet("font-size: 8.5pt; color: #E2E8F0; line-height: 1.3; border: none; background: transparent;")
         info_row.addWidget(lbl_pocketcu, stretch=7)
@@ -2179,7 +2294,7 @@ class KeepingLookupDialog(QDialog):
         lbl_talk_icon.setStyleSheet("background-color: #372213; color: #FFEB3B; font-weight: bold; font-size: 8pt; border-radius: 3px; padding: 2px 4px; border: none;")
         lbl_talk_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        lbl_talk_text = QLabel("포켓CU 미설치<br>고객에게는<br>카카오톡 발송")
+        lbl_talk_text = QLabel("포켓DU 미설치<br>고객에게는<br>카카오톡 발송")
         lbl_talk_text.setStyleSheet("color: #372213; font-size: 7.5pt; font-weight: bold; line-height: 1.1; border: none; background: transparent;")
         
         kakao_layout.addWidget(lbl_talk_icon)
@@ -2202,7 +2317,7 @@ class KeepingLookupDialog(QDialog):
         lbl_scan_indicator.setStyleSheet("font-size: 11pt; font-weight: bold; color: #2D3748; border: none; background: transparent;")
         
         self.input_phone = QLineEdit()
-        self.input_phone.setPlaceholderText("휴대폰 번호를 입력하거나 포켓CU 바코드를 스캔하세요 (- 제외)")
+        self.input_phone.setPlaceholderText("휴대폰 번호를 입력하거나 포켓DU 바코드를 스캔하세요 (- 제외)")
         self.input_phone.setFixedHeight(36)
         self.input_phone.setStyleSheet("""
             QLineEdit {
@@ -2959,7 +3074,7 @@ class KeepingCouponIssueDialog(QDialog):
         lbl_phone_icon = QLabel("📱")
         lbl_phone_icon.setStyleSheet("font-size: 20pt; border: none; background: transparent;")
         
-        lbl_pocket_info = QLabel("포켓CU QR로 포인트 적립은<br>다음단계 한번 더, 총 2번 스캔")
+        lbl_pocket_info = QLabel("포켓DU QR로 포인트 적립은<br>다음단계 한번 더, 총 2번 스캔")
         lbl_pocket_info.setStyleSheet(f"font-size: 8pt; font-weight: bold; color: #37474F; line-height: 1.2; font-family: '{styles.FONT_FAMILY}'; border: none; background: transparent;")
         
         illustration_layout.addWidget(lbl_phone_icon)

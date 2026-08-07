@@ -39,7 +39,7 @@ class PostPaymentPage(QWidget):
 
         # --- LEFT: Receipt Illustration ---
         self.receipt_label = QLabel()
-        asset_path = resource_path(os.path.join("assets", "cu_receipt_scan_illustration.png"))
+        asset_path = resource_path(os.path.join("assets", "du_receipt_scan_illustration.png"))
         if os.path.exists(asset_path):
             pix = QPixmap(asset_path).scaled(styles.s(500), styles.s(500), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.receipt_label.setPixmap(pix)

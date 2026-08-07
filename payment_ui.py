@@ -1005,10 +1005,7 @@ class CashPaymentDialog(QDialog):
         self.txt_received.setFocus()
         
     def add_amount(self, amount):
-        current_text = self.txt_received.text().replace(",", "")
-        current_val = int(current_text) if current_text.isdigit() else 0
-        new_val = current_val + amount
-        self.txt_received.setText(f"{new_val:,}")
+        self.txt_received.setText(f"{amount:,}")
         
     def process_payment(self):
         txt = self.txt_received.text().replace(",", "")
@@ -1570,9 +1567,15 @@ class CashReceiptDialog(QDialog):
         self.receipt_issued = False
         self.receipt_id = ""
         
-        import os
-        audio_path = os.path.abspath(os.path.join("assets", "audio", "현금.mp3"))
-        if os.path.exists(audio_path):
+        import os, threading, subprocess
+        possible_paths = [
+            os.path.abspath(os.path.join("assets", "audio", "cash_receipt_tts.mp3")),
+            os.path.abspath(os.path.join("assets", "audio", "현금영수증.mp3")),
+            os.path.abspath(os.path.join("assets", "audio", "현금.mp3"))
+        ]
+        audio_path = next((p for p in possible_paths if os.path.exists(p)), None)
+        
+        if audio_path and os.path.exists(audio_path):
             from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
             from PyQt6.QtCore import QUrl
             
@@ -1592,6 +1595,20 @@ class CashReceiptDialog(QDialog):
             if main_win:
                 main_win.active_audio_player = self.player
                 main_win.active_audio_output = self.audio_output
+        else:
+            def speak_tts():
+                try:
+                    import pythoncom, pyttsx3
+                    pythoncom.CoInitialize()
+                    engine = pyttsx3.init()
+                    engine.say("현금영수증 필요하세요?")
+                    engine.runAndWait()
+                except Exception:
+                    try:
+                        subprocess.run(['powershell', '-Command', 'Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak("현금영수증 필요하세요?")'], creationflags=0x08000000)
+                    except Exception:
+                        pass
+            threading.Thread(target=speak_tts, daemon=True).start()
         
         # Main Container
         self.container = QFrame(self)
@@ -2033,7 +2050,7 @@ class CashReceiptDialog(QDialog):
         
         self.stop_audio()
         self.receipt_issued = True
-        self.receipt_id = f"CU-{random.randint(100000, 999999)}"
+        self.receipt_id = f"DU-{random.randint(100000, 999999)}"
         self.accept()
 
 
@@ -2167,7 +2184,7 @@ class AffiliateDiscountDialog(QDialog):
         
         from PyQt6.QtWidgets import QComboBox
         self.combo_issuer = QComboBox()
-        self.combo_issuer.addItems(["T멤버십", "CU포인트", "OK캐시백"])
+        self.combo_issuer.addItems(["T멤버십", "DU포인트", "OK캐시백"])
         self.combo_issuer.setFixedHeight(styles.s(38))
         self.combo_issuer.setStyleSheet("QComboBox { background-color: white; border: none; font-size: 11pt; padding-left: 10px; font-family: 'Malgun Gothic'; }")
         self.combo_issuer.currentTextChanged.connect(self.on_issuer_changed)
@@ -2255,11 +2272,11 @@ class AffiliateDiscountDialog(QDialog):
         """)
         btn_ok_cash.clicked.connect(self.process_ok_cashback)
         
-        # 2. 휴대전화번호로 CU포인트조회
-        btn_cu_phone = QPushButton("휴대전화번호로\nCU포인트 조회(등급)")
-        btn_cu_phone.setFixedHeight(styles.s(45))
-        btn_cu_phone.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_cu_phone.setStyleSheet(f"""
+        # 2. 휴대전화번호로 DU포인트조회
+        btn_du_phone = QPushButton("휴대전화번호로\nDU포인트 조회(등급)")
+        btn_du_phone.setFixedHeight(styles.s(45))
+        btn_du_phone.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_du_phone.setStyleSheet(f"""
             QPushButton {{
                 background-color: #546E7A;
                 color: white;
@@ -2271,7 +2288,7 @@ class AffiliateDiscountDialog(QDialog):
             }}
             QPushButton:hover {{ background-color: #455A64; }}
         """)
-        btn_cu_phone.clicked.connect(self.process_cu_phone_lookup)
+        btn_du_phone.clicked.connect(self.process_du_phone_lookup)
         
         # 3. 닫기 [CLEAR]
         btn_clear = QPushButton("닫기 [CLEAR]")
@@ -2308,7 +2325,7 @@ class AffiliateDiscountDialog(QDialog):
         self.btn_confirm.clicked.connect(self.process_confirm)
         
         bottom_layout.addWidget(btn_ok_cash, stretch=2)
-        bottom_layout.addWidget(btn_cu_phone, stretch=2)
+        bottom_layout.addWidget(btn_du_phone, stretch=2)
         bottom_layout.addWidget(btn_clear, stretch=2)
         bottom_layout.addWidget(self.btn_confirm, stretch=2)
         vbox.addLayout(bottom_layout)
@@ -2322,7 +2339,7 @@ class AffiliateDiscountDialog(QDialog):
         CustomMessageDialog(
             "제휴할인/적립 도움말",
             "1. T멤버십: 카드를 리딩하거나 카드번호 16자리를 입력하여 확인을 누르면 회원 등급(VIP/골드/실버)에 따라 할인이 적용됩니다.\n\n"
-            "2. CU포인트: 포인트 카드를 스캔하거나 휴대전화번호 조회 버튼을 눌러 회원을 조회 및 적립/사용할 수 있습니다.\n\n"
+            "2. DU포인트: 포인트 카드를 스캔하거나 휴대전화번호 조회 버튼을 눌러 회원을 조회 및 적립/사용할 수 있습니다.\n\n"
             "3. OK캐시백: OK캐시백 사용 버튼을 통해 포인트를 조회하고 결제에 사용할 수 있습니다.",
             "info",
             self
@@ -2338,7 +2355,7 @@ class AffiliateDiscountDialog(QDialog):
             self
         ).exec()
         
-    def process_cu_phone_lookup(self):
+    def process_du_phone_lookup(self):
         dialog = CuPointPhoneLookupDialog(self)
         if not dialog.exec():
             return
@@ -2349,7 +2366,7 @@ class AffiliateDiscountDialog(QDialog):
         # Exact points from user screenshot: 5443
         points = 5443
         
-        self.combo_issuer.setCurrentText("CU포인트")
+        self.combo_issuer.setCurrentText("DU포인트")
         self.txt_card_number.setText(phone.strip())
         
         # Show points usage confirm dialog
@@ -2362,8 +2379,8 @@ class AffiliateDiscountDialog(QDialog):
             self.discount_amount = use_amt
             
             CustomMessageDialog(
-                "CU포인트 사용 완료",
-                f"CU포인트 사용이 적용되었습니다.\n\n· 사용 포인트: {use_amt:,}원\n· 남은 결제금액: {(self.total_amount - use_amt):,}원",
+                "DU포인트 사용 완료",
+                f"DU포인트 사용이 적용되었습니다.\n\n· 사용 포인트: {use_amt:,}원\n· 남은 결제금액: {(self.total_amount - use_amt):,}원",
                 "info",
                 self
             ).exec()
@@ -2373,8 +2390,8 @@ class AffiliateDiscountDialog(QDialog):
             accum_points = int(self.total_amount * 0.01)
             
             CustomMessageDialog(
-                "CU포인트 적립 적용",
-                f"결제 완료 시 CU포인트가 적립됩니다.\n\n· 적립 예정 포인트: {accum_points:,} P (1% 적립)",
+                "DU포인트 적립 적용",
+                f"결제 완료 시 DU포인트가 적립됩니다.\n\n· 적립 예정 포인트: {accum_points:,} P (1% 적립)",
                 "info",
                 self
             ).exec()
@@ -2435,15 +2452,15 @@ class AffiliateDiscountDialog(QDialog):
                 self
             ).exec()
             
-        elif issuer == "CU포인트":
+        elif issuer == "DU포인트":
             if self.points_used > 0:
                 pass
             else:
                 # Simple point accumulation alert
                 accum_points = int(self.total_amount * 0.01)
                 CustomMessageDialog(
-                    "CU포인트 적립 적용",
-                    f"결제 완료 시 CU포인트가 적립됩니다.\n\n· 적립 예정 포인트: {accum_points:,} P (1% 적립)",
+                    "DU포인트 적립 적용",
+                    f"결제 완료 시 DU포인트가 적립됩니다.\n\n· 적립 예정 포인트: {accum_points:,} P (1% 적립)",
                     "info",
                     self
                 ).exec()
@@ -2499,7 +2516,7 @@ class CuPointPhoneLookupDialog(QDialog):
         hbox = QHBoxLayout(header)
         hbox.setContentsMargins(styles.s(20), 0, styles.s(20), 0)
         
-        title = QLabel("휴대전화번호로 CU포인트 조회")
+        title = QLabel("휴대전화번호로 DU포인트 조회")
         title.setStyleSheet("color: white; font-weight: bold; font-size: 13pt; font-family: 'Malgun Gothic';")
         
         btn_close = QPushButton("X")
@@ -2690,7 +2707,7 @@ class CuPointUseConfirmDialog(QDialog):
         
         # Msg Label
         msg = QLabel(
-            f"고객님의 사용가능 CU멤버십 포인트는 {points:,}원 입니다.\n"
+            f"고객님의 사용가능 DU멤버십 포인트는 {points:,}원 입니다.\n"
             "포인트 사용하시겠습니까?"
         )
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)

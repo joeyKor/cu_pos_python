@@ -1,14 +1,14 @@
-import sys, os, random, datetime, pyttsx3
+import sys, os, random, datetime, pyttsx3, asyncio, hashlib, edge_tts
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, 
                              QLabel, QLineEdit, QGridLayout, QFrame, QAbstractItemView, 
                              QPushButton, QStackedWidget, QInputDialog, QSizePolicy)
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QPixmap
 
 import styles
 from ui_components import (ActionButton, StatusLabel, SummaryFrame, EditItemDialog, 
-                               CustomMessageDialog, SafeBalanceEditDialog, ReceiptPreviewDialog, StoreRegistrationDialog, PromotionDialog, VoucherExchangeDialog, KeepingLookupDialog, KeepingCouponIssueDialog, PromoAlertWithRelatedDialog)
+                               CustomMessageDialog, SafeBalanceEditDialog, ReceiptPreviewDialog, StoreRegistrationDialog, PromotionDialog, VoucherExchangeDialog, KeepingLookupDialog, KeepingCouponIssueDialog, PromoAlertWithRelatedDialog, PasswordInputDialog)
 from product_manager import ProductManager
 from settings_page import SettingsPage
 from payment_ui import CreditCardPaymentDialog, CashPaymentDialog, CashReceiptDialog, AffiliateDiscountDialog, PaymentSelectDialog
@@ -61,6 +61,8 @@ def patched_mousePressEvent(self, event):
 QPushButton.mousePressEvent = patched_mousePressEvent
 
 class POSMainWindow(QMainWindow):
+    tts_play_signal = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("DU Retail POS System")
@@ -93,6 +95,7 @@ class POSMainWindow(QMainWindow):
         import queue
         import threading
         self.tts_queue = queue.Queue()
+        self.tts_play_signal.connect(self._play_tts_file)
         self.tts_thread = threading.Thread(target=self._tts_worker, daemon=True)
         self.tts_thread.start()
         
@@ -137,6 +140,7 @@ class POSMainWindow(QMainWindow):
         self.welcome_page.changeAccumulationRequested.connect(self.open_change_accumulation)
         self.welcome_page.parcelServiceRequested.connect(self.open_parcel_service)
         self.welcome_page.settingsRequested.connect(self.open_settings)
+        self.welcome_page.systemSettingsRequested.connect(self.open_system_settings)
         self.welcome_page.safeBalanceEditRequested.connect(self.handle_safe_balance_edit)
         self.welcome_page.storeRegistrationRequested.connect(self.handle_store_registration)
         self.welcome_page.lastReceiptPrintRequested.connect(self.handle_welcome_receipt_print)
@@ -1079,7 +1083,7 @@ class POSMainWindow(QMainWindow):
                     </table>
                 </div>
                 <div class="card-body">
-                    <div class="brand-name">CU</div>
+                    <div class="brand-name">DU</div>
                     <div class="product-name">{cp["product_name"]}</div>
                     <div class="coupon-type">DU 키핑쿠폰 (물품교환권)</div>
                     
@@ -1319,30 +1323,70 @@ class POSMainWindow(QMainWindow):
         self.update_totals()
 
     def speak(self, text):
-        self.tts_queue.put(text)
+        import os
+        audio_dir = os.path.abspath(os.path.join("assets", "audio"))
+        pregenerated = {
+            "원플러스원 상품입니다.": os.path.join(audio_dir, "promo_1plus1.mp3"),
+            "투플러스원 상품입니다.": os.path.join(audio_dir, "promo_2plus1.mp3"),
+            "현금영수증 필요하세요?": os.path.join(audio_dir, "cash_receipt_tts.mp3"),
+            "어서오세요. 디유입니다.": os.path.join(audio_dir, "welcome_tts.mp3")
+        }
+        audio_file = pregenerated.get(text)
+        if audio_file and os.path.exists(audio_file):
+            self._play_tts_file(audio_file)
+        else:
+            self.tts_queue.put(text)
+
+    def _play_tts_file(self, audio_file):
+        if os.path.exists(audio_file):
+            from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+            from PyQt6.QtCore import QUrl
+            if not hasattr(self, 'active_tts_player') or self.active_tts_player is None:
+                self.active_tts_audio_output = QAudioOutput(self)
+                self.active_tts_player = QMediaPlayer(self)
+                self.active_tts_player.setAudioOutput(self.active_tts_audio_output)
+            self.active_tts_audio_output.setVolume(1.0)
+            self.active_tts_player.stop()
+            self.active_tts_player.setSource(QUrl.fromLocalFile(audio_file))
+            self.active_tts_player.play()
 
     def _tts_worker(self):
-        try:
-            import pyttsx3
-            import ctypes
-            # Initialize COM library for SAPI5 in this background thread
-            ctypes.windll.ole32.CoInitialize(None)
-            
-            engine = pyttsx3.init()
-            engine.setProperty('rate', 180)
-            
-            while True:
-                text = self.tts_queue.get()
-                if text is None:
-                    break
-                try:
-                    engine.say(text)
-                    engine.runAndWait()
-                except Exception:
-                    pass
+        import os, asyncio, hashlib
+        audio_dir = os.path.abspath(os.path.join("assets", "audio"))
+        os.makedirs(audio_dir, exist_ok=True)
+
+        pregenerated = {
+            "원플러스원 상품입니다.": os.path.join(audio_dir, "promo_1plus1.mp3"),
+            "투플러스원 상품입니다.": os.path.join(audio_dir, "promo_2plus1.mp3"),
+            "현금영수증 필요하세요?": os.path.join(audio_dir, "cash_receipt_tts.mp3"),
+            "어서오세요. 디유입니다.": os.path.join(audio_dir, "welcome_tts.mp3")
+        }
+
+        while True:
+            text = self.tts_queue.get()
+            if text is None:
+                break
+            try:
+                if text in pregenerated and os.path.exists(pregenerated[text]):
+                    audio_file = pregenerated[text]
+                else:
+                    text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+                    audio_file = os.path.join(audio_dir, f"tts_{text_hash}.mp3")
+                    if not os.path.exists(audio_file):
+                        try:
+                            async def gen():
+                                c = edge_tts.Communicate(text, 'ko-KR-SunHiNeural')
+                                await c.save(audio_file)
+                            asyncio.run(gen())
+                        except Exception:
+                            pass
+
+                if os.path.exists(audio_file):
+                    self.tts_play_signal.emit(audio_file)
+            except Exception:
+                pass
+            finally:
                 self.tts_queue.task_done()
-        except Exception:
-            pass
 
     def update_table_view(self):
         self.table.setRowCount(len(self.cart))
@@ -1861,6 +1905,14 @@ class POSMainWindow(QMainWindow):
         self.switch_page(4)
         # Refresh lists when entering
         self.settings_page.load_data()
+        self.settings_page.tab_widget.setCurrentIndex(0)
+
+    def open_system_settings(self):
+        dialog = PasswordInputDialog(self)
+        if dialog.exec():
+            self.switch_page(4)
+            self.settings_page.load_data()
+            self.settings_page.tab_widget.setCurrentIndex(2)
 
     def handle_settings_back(self):
         self.handle_inquiry_back() # Reuse same history logic

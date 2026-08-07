@@ -30,6 +30,7 @@ class ClickableLabel(QLabel):
 class WelcomePage(QWidget):
     barcodeScanned = pyqtSignal(str)
     settingsRequested = pyqtSignal()
+    systemSettingsRequested = pyqtSignal()
     safeBalanceEditRequested = pyqtSignal()
     storeRegistrationRequested = pyqtSignal()
     lastReceiptPrintRequested = pyqtSignal()
@@ -65,8 +66,8 @@ class WelcomePage(QWidget):
         header_frame.setStyleSheet("background-color: white; border: none;")
         
         base_path = os.path.join("assets", "image")
-        store_img = resource_path(os.path.join(base_path, "cu_store_recreated_v1_1767798621656.png"))
-        mascot_img = resource_path(os.path.join(base_path, "cu_mascot_fullbody_white_background_1767715363864.png"))
+        store_img = resource_path(os.path.join(base_path, "du_store_recreated_v1_1767798621656.png"))
+        mascot_img = resource_path(os.path.join(base_path, "du_mascot_fullbody_white_background_1767715363864.png"))
 
         # Background Landscape is now a solid color matching the assets
         self.bg_label = None 
@@ -460,16 +461,19 @@ class WelcomePage(QWidget):
         btn_l_arr.setStyleSheet("background: white; border: none;")
         cat_row.addWidget(btn_l_arr)
         
-        cats = [("일반상품", "#7AB800"), ("소분상품", "#6C757D"), ("신문/상품권", "#6C757D"), ("쓰레기봉투/화장", "#6C757D"), ("점포등록", "#6C757D"), ("상품관리", "#6C757D")]
+        cats = [("일반상품", "#7AB800"), ("소분상품", "#6C757D"), ("신문/상품권", "#6C757D"), ("쓰레기봉투/화장", "#6C757D"), ("점포등록", "#6C757D"), ("상품관리", "#6C757D"), ("설정", "#5C6BC0")]
         for n, c in cats:
-            display_text = n if n in ["점포등록", "상품관리"] else ""
+            display_text = n if n in ["점포등록", "상품관리", "설정"] else ""
             b = QPushButton(display_text)
             b.setFixedHeight(styles.s(50))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setStyleSheet(f"background: white; color: #333; font-weight: bold; border: none; border-top: {styles.s(4)}px solid {c};")
             if n == "상품관리":
                 b.clicked.connect(self.settingsRequested.emit)
             elif n == "점포등록":
                 b.clicked.connect(self.storeRegistrationRequested.emit)
+            elif n == "설정":
+                b.clicked.connect(self.systemSettingsRequested.emit)
             cat_row.addWidget(b, stretch=1)
             
         btn_r_arr = QPushButton(">")
@@ -624,3 +628,21 @@ class WelcomePage(QWidget):
             winsound.Beep(2000, 120)
         except Exception:
             pass
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.play_welcome_tts()
+
+    def play_welcome_tts(self):
+        import os
+        from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
+        from PyQt6.QtCore import QUrl
+        
+        audio_path = os.path.abspath(os.path.join("assets", "audio", "welcome_tts.mp3"))
+        if os.path.exists(audio_path):
+            self.welcome_player = QMediaPlayer()
+            self.welcome_audio_output = QAudioOutput()
+            self.welcome_player.setAudioOutput(self.welcome_audio_output)
+            self.welcome_player.setSource(QUrl.fromLocalFile(audio_path))
+            self.welcome_player.play()
+

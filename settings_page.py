@@ -1,6 +1,6 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, 
                              QTableWidgetItem, QLabel, QLineEdit, QPushButton, 
-                             QHeaderView, QWidget, QComboBox, QAbstractItemView, QFrame, QScrollArea, QCheckBox, QTabWidget)
+                             QHeaderView, QWidget, QComboBox, QAbstractItemView, QFrame, QScrollArea, QCheckBox, QTabWidget, QApplication)
 import os
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QPixmap
@@ -86,6 +86,77 @@ class SettingsPage(QWidget):
         self.voucher_tab_layout.addWidget(self.v_left_card, stretch=60)
         self.voucher_tab_layout.addWidget(self.v_right_card, stretch=40)
         self.tab_widget.addTab(self.voucher_tab, "모바일 상품권 관리")
+        
+        # Tab 3: System Settings
+        self.system_tab = QWidget()
+        self.system_tab_layout = QVBoxLayout(self.system_tab)
+        self.system_tab_layout.setContentsMargins(30, 30, 30, 30)
+        self.system_tab_layout.setSpacing(20)
+        
+        # Screen Mode Group
+        mode_card = QFrame()
+        mode_card.setStyleSheet(f"""
+            QFrame {{
+                background-color: white;
+                border: 1px solid #E2E8F0;
+                border-radius: 12px;
+            }}
+        """)
+        card_lyt = QVBoxLayout(mode_card)
+        card_lyt.setContentsMargins(25, 25, 25, 25)
+        card_lyt.setSpacing(15)
+        
+        lbl_mode_title = QLabel("화면 모드 설정")
+        lbl_mode_title.setStyleSheet("font-size: 16pt; font-weight: bold; color: #1E293B; border: none;")
+        card_lyt.addWidget(lbl_mode_title)
+        
+        lbl_mode_desc = QLabel("POS 화면 표시 모드를 선택할 수 있습니다. 전체화면 모드 또는 창 화면 모드로 전환합니다.")
+        lbl_mode_desc.setStyleSheet("font-size: 11pt; color: #64748B; border: none;")
+        card_lyt.addWidget(lbl_mode_desc)
+        
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(15)
+        
+        self.btn_fullscreen = QPushButton("🖥️ 전체화면 모드")
+        self.btn_fullscreen.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_fullscreen.setFixedHeight(50)
+        self.btn_fullscreen.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {styles.PRIMARY_PURPLE};
+                color: white;
+                font-size: 12pt;
+                font-weight: bold;
+                border-radius: 8px;
+                border: none;
+            }}
+            QPushButton:hover {{ background-color: #6D28D9; }}
+        """)
+        self.btn_fullscreen.clicked.connect(self.set_fullscreen)
+        
+        self.btn_windowed = QPushButton("🪟 창 화면 모드")
+        self.btn_windowed.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_windowed.setFixedHeight(50)
+        self.btn_windowed.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #F1F5F9;
+                color: #334155;
+                font-size: 12pt;
+                font-weight: bold;
+                border-radius: 8px;
+                border: 1px solid #CBD5E1;
+            }}
+            QPushButton:hover {{ background-color: #E2E8F0; }}
+        """)
+        self.btn_windowed.clicked.connect(self.set_windowed)
+        
+        btn_row.addWidget(self.btn_fullscreen, stretch=1)
+        btn_row.addWidget(self.btn_windowed, stretch=1)
+        card_lyt.addLayout(btn_row)
+        
+        self.system_tab_layout.addWidget(mode_card)
+        self.system_tab_layout.addStretch()
+        
+        self.tab_widget.addTab(self.system_tab, "시스템 설정")
         
         self.content_layout.addWidget(self.tab_widget)
         self.main_layout.addWidget(self.content_widget, stretch=1)
@@ -1663,7 +1734,7 @@ class SettingsPage(QWidget):
                     </table>
                 </div>
                 <div class="card-body">
-                    <div class="brand-name">CU</div>
+                    <div class="brand-name">DU</div>
                     <div class="product-name">{product_name}</div>
                     
                     <div class="pay-banner">
@@ -1688,3 +1759,21 @@ class SettingsPage(QWidget):
         from ui_components import ReceiptPreviewDialog
         dialog = ReceiptPreviewDialog(html, self, title="모바일 상품권 확인", height=780)
         dialog.exec()
+
+    def set_fullscreen(self):
+        win = self.window()
+        if win:
+            win.showFullScreen()
+            CustomMessageDialog("화면 설정", "전체화면 모드로 전환되었습니다.", 'info', self).exec()
+
+    def set_windowed(self):
+        win = self.window()
+        if win:
+            win.showNormal()
+            # Set to standard POS window size
+            win.resize(styles.s(1024), styles.s(768))
+            # Center it on screen
+            screen = QApplication.primaryScreen().geometry()
+            size = win.geometry()
+            win.move((screen.width() - size.width()) // 2, (screen.height() - size.height()) // 2)
+            CustomMessageDialog("화면 설정", "창 화면 모드로 전환되었습니다.", 'info', self).exec()
