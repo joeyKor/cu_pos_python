@@ -329,6 +329,10 @@ class POSMainWindow(QMainWindow):
     def switch_page(self, index):
         self.page_history.append(index)
         self.central_stack.setCurrentIndex(index)
+        if index == 0 and hasattr(self, 'welcome_page'):
+            self.welcome_page.refresh_quick_items()
+        elif index == 4 and hasattr(self, 'settings_page'):
+            self.settings_page.load_data()
 
     def handle_inquiry_back(self):
         if len(self.page_history) > 1:
@@ -718,14 +722,12 @@ class POSMainWindow(QMainWindow):
         grid.setSpacing(2)
         grid.setContentsMargins(0, 0, 0, 0)
         
-        # Row 1: Common Items (Shortcuts)
-        # Using some predefined barcodes for these buttons
         common_items = [
-            ("친환경)DU백색봉투대\n100", "8801000000003"), 
-            ("아이시스2L P6입\n3,600", "8801000000004"), 
-            ("유앤)포켓몬볼모양젤\n1,000", "8801000000005"), 
-            ("츄파춥스12g\n300", "8801000000006"), 
-            ("트롤리지구젤리(낱개)\n1,000", "8801000000007")
+            ("초코파이\n1,700", "8801111900010"), 
+            ("새우깡\n1,900", "8801111900027"), 
+            ("콜라\n1,600", "8801111900102"), 
+            ("사이다\n1,400", "8801111900119"), 
+            ("신라면\n1,200", "8801111900096")
         ]
         for i, (item_text, barcode) in enumerate(common_items):
             btn = ActionButton(item_text, styles.BUTTON_BOTTOM_STYLE)
@@ -781,7 +783,15 @@ class POSMainWindow(QMainWindow):
     def handle_barcode_input(self):
         barcode = self.input_barcode.text().strip()
         if barcode:
-            self.add_product(barcode)
+            if barcode.startswith("99") and len(barcode) == 13:
+                # Automagically handle voucher scans on main screen
+                voucher = self.get_voucher(barcode)
+                if voucher:
+                    self.process_voucher(barcode, voucher)
+                else:
+                    CustomMessageDialog("조회 실패", "등록되지 않은 모바일 상품권 바코드입니다.", 'warning', self).exec()
+            else:
+                self.add_product(barcode)
             self.input_barcode.clear()
             self.input_barcode.setStyleSheet(styles.BARCODE_INPUT_STYLE)
             self.input_barcode.setFocus()
@@ -790,6 +800,11 @@ class POSMainWindow(QMainWindow):
         return self.product_manager.get_voucher(barcode)
 
     def process_voucher(self, barcode, voucher):
+        # 1. Validation check for single-use status
+        if voucher.get("status") == "used":
+            CustomMessageDialog("사용 불가", "이미 사용 완료된 모바일 상품권입니다.", 'warning', self).exec()
+            return
+            
         target_barcode = voucher["product_barcode"]
         target_product = self.product_manager.get_product(target_barcode)
         if not target_product:
@@ -834,8 +849,7 @@ class POSMainWindow(QMainWindow):
                 return
 
     def apply_voucher_payment(self, barcode, product_name, amount):
-        total_amt, total_disc, final_amt = self.get_cart_summary()
-        self.total_paid += amount
+        # We treat MobileVoucher as a discount now, so it lowers the final_amt rather than raising total_paid.
         self.payments.append({
             "method": "MobileVoucher",
             "amount": amount,
@@ -846,6 +860,24 @@ class POSMainWindow(QMainWindow):
             self.btn_mobile_pay.set_checked(True)
             
         self.update_totals()
+        self.update_table_view()
+        
+        # Calculate new totals including this voucher discount to check if transaction is fully covered
+        total_amt, total_disc, final_amt = self.get_cart_summary()
+        m_disc = getattr(self, "membership_discount", 0)
+        total_disc += m_disc
+        
+        # Sum voucher discounts
+        voucher_disc_total = sum(p["amount"] for p in self.payments if p["method"] == "MobileVoucher")
+        total_disc += voucher_disc_total
+        final_amt -= (m_disc + voucher_disc_total)
+        
+        if self.total_paid >= final_amt:
+            # Import and show cash receipt dialog with correct positional arguments
+            from payment_ui import CashReceiptDialog
+            dialog = CashReceiptDialog(final_amt, self.total_paid + voucher_disc_total, self)
+            dialog.exec() # User interacts with Cash Receipt
+            self.finalize_transaction()
         
     def get_keeping_coupon(self, barcode):
         import json
@@ -1412,6 +1444,18 @@ class POSMainWindow(QMainWindow):
             elif promo_type == 2: # 2+1
                 discount = (qty // 3) * price
 
+            # Check if this item barcode has an applied mobile voucher discount
+            if hasattr(self, 'payments'):
+                for p in self.payments:
+                    if p.get("method") == "MobileVoucher":
+                        # Lookup voucher to check if it matches this item
+                        v_bc = p.get("details", {}).get("barcode")
+                        if v_bc:
+                            voucher = self.product_manager.get_voucher(v_bc)
+                            if voucher and voucher.get("product_barcode") == barcode:
+                                # Apply the discount to this row
+                                discount += p["amount"]
+
             amt = (price * qty) - discount
             self.table.setItem(row, 3, QTableWidgetItem(f"{price:,}"))
             self.table.setItem(row, 4, QTableWidgetItem(f"{amt:,}"))
@@ -1455,8 +1499,14 @@ class POSMainWindow(QMainWindow):
     def update_totals(self):
         total_amt, total_disc, final_amt = self.get_cart_summary()
         m_disc = getattr(self, "membership_discount", 0)
-        total_disc += m_disc
-        final_amt -= m_disc
+        
+        # Calculate mobile voucher discount
+        v_disc = 0
+        if hasattr(self, 'payments'):
+            v_disc = sum(p["amount"] for p in self.payments if p.get("method") == "MobileVoucher")
+            
+        total_disc += (m_disc + v_disc)
+        final_amt -= (m_disc + v_disc)
         
         total_qty = sum(item["qty"] for item in self.cart)
         
@@ -1585,12 +1635,15 @@ class POSMainWindow(QMainWindow):
             self.finalize_transaction()
 
     def open_card_payment(self):
-        # Calculate remaining total
+        # Calculate remaining total (subtracting mobile voucher discounts from final_amt)
         total_amt, total_disc, final_amt = self.get_cart_summary()
+        m_disc = getattr(self, "membership_discount", 0)
+        v_disc = sum(p["amount"] for p in self.payments if p.get("method") == "MobileVoucher")
+        final_amt -= (m_disc + v_disc)
         remaining = final_amt - self.total_paid
         
-        if final_amt == 0:
-            CustomMessageDialog("결제 불가", "결제할 상품이 없습니다.", 'warning', self).exec()
+        if final_amt <= 0:
+            CustomMessageDialog("결제 불가", "결제할 상품이 없거나 이미 할인으로 처리가 완료되었습니다.", 'warning', self).exec()
             return
 
         # Toggle off if already paid
@@ -1637,12 +1690,15 @@ class POSMainWindow(QMainWindow):
 
 
     def open_cash_payment(self):
-        # Calculate remaining total
+        # Calculate remaining total (subtracting mobile voucher discounts from final_amt)
         total_amt, total_disc, final_amt = self.get_cart_summary()
+        m_disc = getattr(self, "membership_discount", 0)
+        v_disc = sum(p["amount"] for p in self.payments if p.get("method") == "MobileVoucher")
+        final_amt -= (m_disc + v_disc)
         remaining = final_amt - self.total_paid
         
-        if final_amt == 0:
-            CustomMessageDialog("결제 불가", "결제할 상품이 없습니다.", 'warning', self).exec()
+        if final_amt <= 0:
+            CustomMessageDialog("결제 불가", "결제할 상품이 없거나 이미 할인으로 처리가 완료되었습니다.", 'warning', self).exec()
             return
 
         # Toggle off if already paid
@@ -1807,6 +1863,13 @@ class POSMainWindow(QMainWindow):
             })
             # Deduct Stock
             self.product_manager.reduce_stock(item["barcode"], item["qty"])
+            
+        # Update voucher usage status to 'used' for scanned vouchers
+        for p in self.payments:
+            if p.get("method") == "MobileVoucher":
+                v_bc = p.get("details", {}).get("barcode")
+                if v_bc:
+                    self.product_manager.mark_voucher_used(v_bc)
             
         tx_barcode = self.generate_tx_barcode()
         

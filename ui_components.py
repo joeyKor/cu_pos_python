@@ -1275,9 +1275,57 @@ class ReceiptPreviewDialog(QDialog):
         """)
         btn_close.clicked.connect(self.reject)
         
-        btn_layout.addWidget(btn_print, stretch=2)
-        btn_layout.addWidget(btn_close, stretch=1)
+        # Add 'Save as Image' button if it is a Mobile Voucher view
+        if "상품권" in title:
+            btn_save = QPushButton("이미지 저장")
+            btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_save.setFixedHeight(50)
+            btn_save.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {styles.PRIMARY_PURPLE};
+                    color: white;
+                    border-radius: 10px;
+                    font-size: 14pt;
+                    font-weight: bold;
+                }}
+                QPushButton:hover {{ background-color: {styles.DARK_PURPLE}; }}
+            """)
+            btn_save.clicked.connect(self.save_as_image)
+            btn_layout.addWidget(btn_save, stretch=2)
+            btn_layout.addWidget(btn_print, stretch=2)
+            btn_layout.addWidget(btn_close, stretch=1)
+        else:
+            btn_layout.addWidget(btn_print, stretch=2)
+            btn_layout.addWidget(btn_close, stretch=1)
+            
         layout.addLayout(btn_layout)
+
+    def save_as_image(self):
+        try:
+            from PyQt6.QtWidgets import QFileDialog
+            from PyQt6.QtGui import QImage, QPainter
+            
+            # Format filename hint
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "상품권 이미지 저장", os.path.expanduser("~/Desktop/mobile_voucher.png"), "Images (*.png)"
+            )
+            if file_path:
+                # Render text browser document contents to QImage
+                doc = self.view.document()
+                # Use standard mobile voucher width/height ratios
+                image = QImage(360, 700, QImage.Format.Format_ARGB32)
+                image.fill(Qt.GlobalColor.white)
+                
+                painter = QPainter(image)
+                doc.drawContents(painter)
+                painter.end()
+                
+                image.save(file_path)
+                from ui_components import CustomMessageDialog
+                CustomMessageDialog("완료", "상품권 이미지가 성공적으로 저장되었습니다.", 'info', self).exec()
+        except Exception as e:
+            from ui_components import CustomMessageDialog
+            CustomMessageDialog("저장 실패", f"이미지 저장 도중 오류가 발생했습니다:\n{str(e)}", 'warning', self).exec()
 
     def print_receipt(self):
         try:

@@ -1,9 +1,9 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, 
                              QTableWidgetItem, QLabel, QLineEdit, QPushButton, 
-                             QHeaderView, QWidget, QComboBox, QAbstractItemView, QFrame, QScrollArea, QCheckBox, QTabWidget, QApplication)
+                             QHeaderView, QWidget, QComboBox, QAbstractItemView, QFrame, QScrollArea, QCheckBox, QTabWidget, QApplication, QGridLayout)
 import os
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QColor
 import styles
 from product_manager import ProductManager, CATEGORIES
 from ui_components import CustomMessageDialog
@@ -447,52 +447,79 @@ class SettingsPage(QWidget):
         
         # Scroll Area for the form fields
         scroll = QScrollArea()
+        # Set widget resizable to false or compact and remove scroll margins to prevent unnecessary scrolling
         scroll.setWidgetResizable(True)
         scroll.setStyleSheet("QScrollArea { border: none; background-color: transparent; } QWidget { background-color: transparent; }")
         scroll.verticalScrollBar().setStyleSheet(styles.SCROLLBAR_STYLE)
         
         form_container = QWidget()
         form_layout = QVBoxLayout(form_container)
-        form_layout.setSpacing(styles.s(10))
+        form_layout.setSpacing(styles.s(8))
         form_layout.setContentsMargins(0, 0, 5, 0)
         
-        # Barcode Input
+        # Grid layout for compact side-by-side elements
+        grid = QGridLayout()
+        grid.setSpacing(styles.s(8))
+        grid.setContentsMargins(0, 0, 0, 0)
+        
+        # 1. Barcode & Quick Checkbox in a row
         barcode_header_layout = QHBoxLayout()
         lbl_barcode = QLabel("바코드")
         lbl_barcode.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR};")
-        
         self.lbl_barcode_counter = QLabel("(0 / 13)")
         self.lbl_barcode_counter.setStyleSheet(f"font-size: {styles.FONT_SIZE_SMALL}; color: {styles.PRIMARY_PURPLE}; font-weight: bold;")
-        
         barcode_header_layout.addWidget(lbl_barcode)
         barcode_header_layout.addWidget(self.lbl_barcode_counter)
         barcode_header_layout.addStretch()
         
         self.input_barcode = QLineEdit()
-        self.input_barcode.setPlaceholderText("바코드를 스캔하거나 입력하세요")
-        self.input_barcode.setStyleSheet(MODERN_INPUT_STYLE)
+        self.input_barcode.setReadOnly(True)
+        self.input_barcode.setPlaceholderText("상품 추가/저장 시 바코드가 자동 생성됩니다")
+        self.input_barcode.setStyleSheet(MODERN_INPUT_STYLE.replace("#F9FAFB", "#F3F4F6")) # Darker gray background for read-only
         self.input_barcode.textChanged.connect(self.update_barcode_counter)
         
-        lbl_name, self.input_name = self.create_input_field("상품명")
-        lbl_price, self.input_price = self.create_input_field("단가 (원)")
-        lbl_stock, self.input_stock = self.create_input_field("재고 수량")
+        self.check_quick = QCheckBox("단축 등록")
+        self.check_quick.setStyleSheet(MODERN_CHECKBOX_STYLE)
         
-        # Apply modern styling
+        # Add to grid: Barcode (Row 0, Col 0, span 1), Checkbox (Row 0, Col 1, span 1)
+        grid.addLayout(barcode_header_layout, 0, 0)
+        grid.addWidget(self.check_quick, 0, 1, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
+        grid.addWidget(self.input_barcode, 1, 0, 1, 2)
+        
+        # 2. Product Name (Row 2, 3)
+        lbl_name = QLabel("상품명")
+        lbl_name.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR};")
+        self.input_name = QLineEdit()
         self.input_name.setStyleSheet(MODERN_INPUT_STYLE)
         self.input_name.setPlaceholderText("상품명을 입력하세요")
+        grid.addWidget(lbl_name, 2, 0, 1, 2)
+        grid.addWidget(self.input_name, 3, 0, 1, 2)
+        
+        # 3. Price & Stock (Row 4, 5)
+        lbl_price = QLabel("단가 (원)")
+        lbl_price.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR};")
+        self.input_price = QLineEdit()
         self.input_price.setStyleSheet(MODERN_INPUT_STYLE)
         self.input_price.setPlaceholderText("예: 2,000")
+        
+        lbl_stock = QLabel("재고 수량")
+        lbl_stock.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR};")
+        self.input_stock = QLineEdit()
         self.input_stock.setStyleSheet(MODERN_INPUT_STYLE)
         self.input_stock.setPlaceholderText("예: 100")
         
-        # Promotion Combo
+        grid.addWidget(lbl_price, 4, 0)
+        grid.addWidget(self.input_price, 5, 0)
+        grid.addWidget(lbl_stock, 4, 1)
+        grid.addWidget(self.input_stock, 5, 1)
+        
+        # 4. Promo & Category (Row 6, 7)
         lbl_promo = QLabel("행사 종류")
         lbl_promo.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR};")
         self.combo_promo = QComboBox()
         self.combo_promo.addItems(["없음", "1+1", "2+1"])
         self.combo_promo.setStyleSheet(MODERN_COMBO_STYLE)
         
-        # Category Combo
         lbl_cat = QLabel("분류")
         lbl_cat.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR};")
         self.combo_category = QComboBox()
@@ -500,65 +527,23 @@ class SettingsPage(QWidget):
         self.combo_category.setEditable(True)
         self.combo_category.setStyleSheet(MODERN_COMBO_STYLE)
         
-        # Quick Item Checkbox
-        self.check_quick = QCheckBox("메인 화면 단축 버튼 등록")
-        self.check_quick.setStyleSheet(MODERN_CHECKBOX_STYLE)
+        grid.addWidget(lbl_promo, 6, 0)
+        grid.addWidget(self.combo_promo, 7, 0)
+        grid.addWidget(lbl_cat, 6, 1)
+        grid.addWidget(self.combo_category, 7, 1)
         
-        # Assemble form with side-by-side elements
-        form_layout.addLayout(barcode_header_layout)
-        form_layout.addWidget(self.input_barcode)
+        form_layout.addLayout(grid)
         
-        form_layout.addWidget(lbl_name)
-        form_layout.addWidget(self.input_name)
-        
-        # Row 3: Price & Stock Side-by-Side
-        price_stock_layout = QHBoxLayout()
-        price_stock_layout.setSpacing(10)
-        
-        price_col = QVBoxLayout()
-        price_col.setSpacing(4)
-        price_col.addWidget(lbl_price)
-        price_col.addWidget(self.input_price)
-        
-        stock_col = QVBoxLayout()
-        stock_col.setSpacing(4)
-        stock_col.addWidget(lbl_stock)
-        stock_col.addWidget(self.input_stock)
-        
-        price_stock_layout.addLayout(price_col)
-        price_stock_layout.addLayout(stock_col)
-        form_layout.addLayout(price_stock_layout)
-        
-        # Row 4: Promo & Category Side-by-Side
-        promo_cat_layout = QHBoxLayout()
-        promo_cat_layout.setSpacing(10)
-        
-        promo_col = QVBoxLayout()
-        promo_col.setSpacing(4)
-        promo_col.addWidget(lbl_promo)
-        promo_col.addWidget(self.combo_promo)
-        
-        cat_col = QVBoxLayout()
-        cat_col.setSpacing(4)
-        cat_col.addWidget(lbl_cat)
-        cat_col.addWidget(self.combo_category)
-        
-        promo_cat_layout.addLayout(promo_col)
-        promo_cat_layout.addLayout(cat_col)
-        form_layout.addLayout(promo_cat_layout)
-        
-        form_layout.addWidget(self.check_quick)
-        
-        # Row 5: Product Image Layout
+        # 5. Product Image Layout (More compact, side-by-side)
         lbl_img_section = QLabel("상품 이미지")
-        lbl_img_section.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR}; margin-top: 5px;")
+        lbl_img_section.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR}; margin-top: 2px;")
         form_layout.addWidget(lbl_img_section)
         
         img_row_layout = QHBoxLayout()
-        img_row_layout.setSpacing(15)
+        img_row_layout.setSpacing(10)
         
         self.lbl_image_preview = QLabel("이미지 없음")
-        self.lbl_image_preview.setFixedSize(styles.s(120), styles.s(120))
+        self.lbl_image_preview.setFixedSize(styles.s(80), styles.s(80))
         self.lbl_image_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.lbl_image_preview.setStyleSheet("""
             QLabel {
@@ -567,34 +552,32 @@ class SettingsPage(QWidget):
                 background-color: #F9FAFB;
                 color: #6B7280;
                 font-weight: bold;
+                font-size: 9pt;
             }
         """)
         
         img_btn_layout = QVBoxLayout()
-        img_btn_layout.setSpacing(8)
+        img_btn_layout.setSpacing(4)
         
         self.btn_select_image = QPushButton("이미지 찾기")
         self.btn_select_image.setStyleSheet(MODERN_BTN_PURPLE)
-        self.btn_select_image.setFixedHeight(styles.s(36))
+        self.btn_select_image.setFixedHeight(styles.s(32))
         self.btn_select_image.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_select_image.clicked.connect(self.select_product_image)
         
         self.btn_clear_image = QPushButton("이미지 삭제")
         self.btn_clear_image.setStyleSheet(MODERN_BTN_GRAY)
-        self.btn_clear_image.setFixedHeight(styles.s(36))
+        self.btn_clear_image.setFixedHeight(styles.s(32))
         self.btn_clear_image.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_clear_image.clicked.connect(self.clear_product_image)
         
         img_btn_layout.addWidget(self.btn_select_image)
         img_btn_layout.addWidget(self.btn_clear_image)
-        img_btn_layout.addStretch()
         
         img_row_layout.addWidget(self.lbl_image_preview)
         img_row_layout.addLayout(img_btn_layout)
         img_row_layout.addStretch()
         form_layout.addLayout(img_row_layout)
-        
-        form_layout.addStretch()
         
         scroll.setWidget(form_container)
         right_layout.addWidget(scroll)
@@ -795,14 +778,24 @@ class SettingsPage(QWidget):
         promo_type = self.combo_promo.currentIndex()
         category = self.combo_category.currentText().strip()
         is_quick = self.check_quick.isChecked()
-        
-        if not barcode or not name or not price_str or not stock_str:
+
+        # Auto generate general product barcode starting with 88 (Korean retail standard code prefix) if not editing
+        if not self.current_editing_barcode:
+            import random
+            existing_products = self.product_manager.get_all_products()
+            while True:
+                rand_part = "".join([str(random.randint(0, 9)) for _ in range(11)])
+                barcode = f"88{rand_part}"
+                if barcode not in existing_products:
+                    break
+                    
+        if not name or not price_str or not stock_str:
             self.show_alert("경고", "모든 필드를 입력해주세요.", 'warning')
             return
-        
+            
         # Validation: 13 digits numeric
-        if len(barcode) != 13 or not barcode.isdigit():
-            self.show_alert("경고", "바코드는 13자리 숫자로 입력해주세요.\n(예: 8801234567890)", 'warning')
+        if not barcode or len(barcode) != 13 or not barcode.isdigit():
+            self.show_alert("경고", "바코드가 올바르게 생성되지 않았습니다. 다시 시도해 주세요.", 'warning')
             return
             
         try:
@@ -825,26 +818,26 @@ class SettingsPage(QWidget):
                     if self.show_alert("중복 확인", msg, 'question'):
                         # Remove the original product being edited and overwrite the target barcode
                         self.product_manager.delete_product(self.current_editing_barcode)
-                        self.product_manager.add_product(barcode, name, price, category, stock, promo_type)
+                        self.product_manager.add_product(barcode, name, price, category, stock, promo_type, is_quick)
                     else:
                         return
                 else:
                     # Normal rename (barcode changed to a new unique one)
-                    self.product_manager.update_product_key(self.current_editing_barcode, barcode, name, price, category, stock, promo_type)
+                    self.product_manager.update_product_key(self.current_editing_barcode, barcode, name, price, category, stock, promo_type, is_quick)
             else:
                 # Barcode didn't change, just update details
-                self.product_manager.add_product(barcode, name, price, category, stock, promo_type)
+                self.product_manager.add_product(barcode, name, price, category, stock, promo_type, is_quick)
         else:
             # Scenario 2: Adding a completely new product (or duplicate on enter)
             if existing_product:
                 msg = f"바코드 [{barcode}]는 이미 등록된 상품입니다.\n기존 상품: {existing_product['name']}\n\n이 상품 정보를 현재 입력하신 정보로 변경하시겠습니까?"
                 if self.show_alert("중복 확인", msg, 'question'):
-                    self.product_manager.add_product(barcode, name, price, category, stock, promo_type)
+                    self.product_manager.add_product(barcode, name, price, category, stock, promo_type, is_quick)
                 else:
                     return
             else:
                 # Normal new addition
-                self.product_manager.add_product(barcode, name, price, category, stock, promo_type)
+                self.product_manager.add_product(barcode, name, price, category, stock, promo_type, is_quick)
 
         # Image Processing (Save / Delete / Move)
         if self.image_deleted:
@@ -1097,8 +1090,8 @@ class SettingsPage(QWidget):
         v_left_layout.addLayout(header_row)
         
         self.v_table = QTableWidget()
-        self.v_table.setColumnCount(4)
-        self.v_table.setHorizontalHeaderLabels(["상품권 바코드", "상품권 이름", "교환 대상 상품", "가격"])
+        self.v_table.setColumnCount(5)
+        self.v_table.setHorizontalHeaderLabels(["상품권 바코드", "상품권 이름", "교환 대상 상품", "가격", "상태"])
         
         SETTINGS_TABLE_STYLE = f"""
             QTableWidget {{
@@ -1138,10 +1131,11 @@ class SettingsPage(QWidget):
         header = self.v_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setMinimumHeight(styles.s(45))
-        self.v_table.setColumnWidth(0, styles.s(150)) # Barcode
-        self.v_table.setColumnWidth(1, styles.s(200)) # Name
-        self.v_table.setColumnWidth(2, styles.s(200)) # Target
-        self.v_table.setColumnWidth(3, styles.s(90))  # Price
+        self.v_table.setColumnWidth(0, styles.s(140)) # Barcode
+        self.v_table.setColumnWidth(1, styles.s(170)) # Name
+        self.v_table.setColumnWidth(2, styles.s(170)) # Target
+        self.v_table.setColumnWidth(3, styles.s(80))  # Price
+        self.v_table.setColumnWidth(4, styles.s(80))  # Status
         
         self.v_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.v_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -1307,8 +1301,9 @@ class SettingsPage(QWidget):
         barcode_header_layout.addStretch()
         
         self.v_input_barcode = QLineEdit()
-        self.v_input_barcode.setPlaceholderText("상품권 바코드를 스캔하거나 입력하세요")
-        self.v_input_barcode.setStyleSheet(MODERN_INPUT_STYLE)
+        self.v_input_barcode.setReadOnly(True)
+        self.v_input_barcode.setPlaceholderText("교환 대상 상품 선택 시 자동으로 생성됩니다")
+        self.v_input_barcode.setStyleSheet(MODERN_INPUT_STYLE.replace("#F9FAFB", "#F3F4F6"))
         self.v_input_barcode.textChanged.connect(self.update_v_barcode_counter)
         
         # Target Product Dropdown
@@ -1417,6 +1412,19 @@ class SettingsPage(QWidget):
             if product:
                 self.v_input_name.setText(f"모바일){product['name']}교환권")
                 self.v_input_price.setText(str(product['price']))
+                
+                # Auto-generate barcode if not editing an existing voucher
+                if not self.current_editing_v_barcode:
+                    import random
+                    existing_vouchers = self.product_manager.get_all_vouchers()
+                    while True:
+                        # Generate 11 random digits to append to '99'
+                        rand_part = "".join([str(random.randint(0, 9)) for _ in range(11)])
+                        generated_bc = f"99{rand_part}"
+                        if generated_bc not in existing_vouchers:
+                            break
+                    self.v_input_barcode.setText(generated_bc)
+                    self.update_v_barcode_counter()
 
     def load_voucher_data(self):
         # Populate target product list
@@ -1434,11 +1442,22 @@ class SettingsPage(QWidget):
             target_product = self.product_manager.get_product(target_barcode)
             target_name = target_product["name"] if target_product else f"미기록 ({target_barcode})"
             
+            status = data.get("status", "unused")
+            status_text = "사용완료" if status == "used" else "미사용"
+            
             self.v_table.setItem(row, 2, QTableWidgetItem(target_name))
             self.v_table.setItem(row, 3, QTableWidgetItem(f"{data['price']:,}"))
+            self.v_table.setItem(row, 4, QTableWidgetItem(status_text))
             
             self.v_table.item(row, 0).setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
             self.v_table.item(row, 3).setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self.v_table.item(row, 4).setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+            
+            # Apply styling colors for status
+            if status == "used":
+                self.v_table.item(row, 4).setForeground(QColor("#D32F2F")) # Red
+            else:
+                self.v_table.item(row, 4).setForeground(QColor("#388E3C")) # Green
             
             row += 1
 
