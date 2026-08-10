@@ -551,7 +551,7 @@ class PromoAlertWithRelatedDialog(QDialog):
                         break
                 if not img_path:
                     # Fallback to default mascot
-                    img_path = resource_path(os.path.join("assets", "image", "du_mascot_fullbody_white_background_1767715363864.png"))
+                    img_path = resource_path(os.path.join("assets", "image", "du_2.png"))
                     
                 pixmap = QPixmap(img_path)
                 if not pixmap.isNull():
@@ -1928,7 +1928,7 @@ class ProductInquiryDialog(QDialog):
             self.txt_minor_status.clear()
             self.txt_order_status.clear()
             # Mascot placeholder
-            img_path = resource_path(os.path.join("assets", "image", "du_mascot_fullbody_white_background_1767715363864.png"))
+            img_path = resource_path(os.path.join("assets", "image", "du_2.png"))
             pixmap = QPixmap(img_path)
             self.lbl_product_image.setPixmap(pixmap.scaled(styles.s(160), styles.s(180), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
             return
@@ -1987,7 +1987,7 @@ class ProductInquiryDialog(QDialog):
                     break
                     
         if not img_path:
-            img_path = resource_path(os.path.join("assets", "image", "du_mascot_fullbody_white_background_1767715363864.png"))
+            img_path = resource_path(os.path.join("assets", "image", "du_2.png"))
             
         pixmap = QPixmap(img_path)
         if not pixmap.isNull():
@@ -2248,7 +2248,7 @@ class KeepingLookupDialog(QDialog):
         img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # Let's try loading cu_receipt_scan_illustration or mascot image
-        ill_path = resource_path(os.path.join("assets", "image", "du_receipt_scan_illustration.png"))
+        ill_path = resource_path(os.path.join("assets", "image", "du_3.png"))
         if os.path.exists(ill_path):
             pixmap = QPixmap(ill_path)
             # Scale to fit

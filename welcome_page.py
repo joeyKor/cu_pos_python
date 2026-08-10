@@ -66,8 +66,8 @@ class WelcomePage(QWidget):
         header_frame.setStyleSheet("background-color: white; border: none;")
         
         base_path = os.path.join("assets", "image")
-        store_img = resource_path(os.path.join(base_path, "du_store_recreated_v1_1767798621656.png"))
-        mascot_img = resource_path(os.path.join(base_path, "du_mascot_fullbody_white_background_1767715363864.png"))
+        store_img = resource_path(os.path.join(base_path, "du_1.png"))
+        mascot_img = resource_path(os.path.join(base_path, "du_2.png"))
 
         # Background Landscape is now a solid color matching the assets
         self.bg_label = None 

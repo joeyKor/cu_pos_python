@@ -1590,7 +1590,7 @@ class SettingsPage(QWidget):
                     image_path = p
                     break
                 
-        if os.path.exists(image_path):
+        if image_path and os.path.exists(image_path):
             try:
                 with open(image_path, "rb") as f:
                     img_data = f.read()

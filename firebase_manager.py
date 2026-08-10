@@ -38,7 +38,10 @@ class FirebaseManager:
         self.mock_data = {}
         
         # Determine credentials path
-        credentials_path = os.path.join(os.path.abspath("."), "json", "firebase_credentials.json")
+        if hasattr(sys, '_MEIPASS'):
+            credentials_path = os.path.join(sys._MEIPASS, "json", "firebase_credentials.json")
+        else:
+            credentials_path = os.path.join(os.path.abspath("."), "json", "firebase_credentials.json")
         
         if os.path.exists(credentials_path):
             try:
