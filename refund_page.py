@@ -165,7 +165,7 @@ class RefundPage(QWidget):
             self.barcode_input.clear()
 
     def on_barcode_text_changed(self, text):
-        if len(text) >= 16:
+        if len(text) >= 20:
             self.barcodeScanned.emit(text.strip())
             self.barcode_input.clear()
             self.barcode_input.setFocus()

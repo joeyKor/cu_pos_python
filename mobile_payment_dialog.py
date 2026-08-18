@@ -296,6 +296,7 @@ class MobilePaymentDialog(QDialog):
             return
             
         is_qr = account_num.startswith("pay")
+        self.is_qr_payment = is_qr
         if is_qr:
             account_num = account_num[3:]
             self.txt_account.setText(account_num)
@@ -379,8 +380,8 @@ class MobilePaymentDialog(QDialog):
             }}
             QProgressBar::chunk {{
                 background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:1, y2:0, 
-                                                stop:0 {styles.PRIMARY_PURPLE}, 
-                                                stop:1 {styles.DARK_PURPLE});
+                                                 stop:0 {styles.PRIMARY_PURPLE}, 
+                                                 stop:1 {styles.DARK_PURPLE});
                 border-radius: {styles.s(6)}px;
             }}
         """)
@@ -466,5 +467,6 @@ class MobilePaymentDialog(QDialog):
         return {
             "account_number": getattr(self, "final_account_number", ""),
             "balance_after": getattr(self, "final_balance_after", 0.0),
-            "amount": self.total_amount
+            "amount": self.total_amount,
+            "is_qr": getattr(self, "is_qr_payment", False)
         }

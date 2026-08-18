@@ -12,16 +12,16 @@ MOCK_DB_FILE = os.path.join("json", "firebase_mock_db.json")
 DEFAULT_MOCK_DATA = {
     "users": {
         "R6H4Y1y78beOardDbsGC8BaHkxrr1": {
-            "name": "아빠",
-            "pin": "850216",
-            "birthDate": "1993-03-11",
-            "birthday": "erg",
-            "email": "daddy@naver.com",
-            "school": "보호자",
+            "name": "테스터",
+            "pin": "000000",
+            "birthDate": "1990-01-01",
+            "birthday": "test",
+            "email": "tester@example.com",
+            "school": "일반",
             "accounts": {
                 "main": {
-                    "accountNumber": "010-2792-9891-11",
-                    "balance": 203050.2
+                    "accountNumber": "000-0000-0000-00",
+                    "balance": 200000.0
                 }
             },
             "transactions": {},
@@ -373,8 +373,8 @@ class FirebaseManager:
             "balance_after": new_balance,
             "description": "환불",
             "is_deposit": True,
-            "memo_from_sender": "반품",
-            "memo_to_me": usr_name,
+            "memo_from_sender": "",
+            "memo_to_me": "",
             "recipientName": usr_name,
             "senderName": store_name,
             "timestamp": timestamp_str,
@@ -387,13 +387,13 @@ class FirebaseManager:
             found_user["notifications"] = {}
             
         found_user["notifications"][notif_id] = {
-            "message": f"{store_name}에서 {int(amount):,}원이 반품(환불)되었습니다.",
+            "message": f"{store_name}에서 {int(amount):,}원이 환불되었습니다.",
             "read": False,
             "timestamp": timestamp_str
         }
         
         self.save_mock_db()
-        return True, "반품 처리가 정상적으로 완료되었습니다.", new_balance
+        return True, "환불 처리가 정상적으로 완료되었습니다.", new_balance
 
     def _process_real_refund(self, candidates, amount, store_name):
         try:
@@ -435,10 +435,10 @@ class FirebaseManager:
                 tx.set(tx_ref, {
                     'amount': amount,
                     'balance_after': new_bal,
-                    'description': "반품",
+                    'description': "환불",
                     'is_deposit': True,
-                    'memo_from_sender': "반품",
-                    'memo_to_me': usr_name,
+                    'memo_from_sender': "",
+                    'memo_to_me': "",
                     'recipientName': usr_name,
                     'senderName': store_name,
                     'timestamp': self.firestore_module.SERVER_TIMESTAMP,
@@ -448,7 +448,7 @@ class FirebaseManager:
                 # Add Notification Document
                 notif_ref = usr_ref.collection('notifications').document()
                 tx.set(notif_ref, {
-                    'message': f"{store_name}에서 {int(amount):,}원이 반품(환불)되었습니다.",
+                    'message': f"{store_name}에서 {int(amount):,}원이 환불되었습니다.",
                     'read': False,
                     'timestamp': self.firestore_module.SERVER_TIMESTAMP
                 })
@@ -464,14 +464,14 @@ class FirebaseManager:
                     'paymentState': {
                         'status': 'success',
                         'amount': amount,
-                        'storeName': f"반품-{store_name}",
+                        'storeName': f"환불-{store_name}",
                         'balanceAfter': new_balance
                     }
                 })
             except Exception:
                 pass
                 
-            return True, "반품 처리가 정상적으로 완료되었습니다.", new_balance
+            return True, "환불 처리가 정상적으로 완료되었습니다.", new_balance
             
         except Exception as e:
-            return False, f"반품 처리 중 오류가 발생했습니다: {e}", 0.0
+            return False, f"환불 처리 중 오류가 발생했습니다: {e}", 0.0

@@ -146,6 +146,31 @@ class TransactionManager:
             print(f"Error updating cash receipt: {e}")
             return False
 
+    def update_point_accumulation(self, tx_barcode, phone_number, accumulated_points):
+        try:
+            with open(self.file_path, 'r+', encoding='utf-8') as f:
+                data = json.load(f)
+                updated = False
+                for tx in data:
+                    if tx.get("tx_barcode") == tx_barcode:
+                        if "point_details" not in tx or tx["point_details"] is None:
+                            tx["point_details"] = {}
+                        tx["point_details"]["accumulated_points"] = accumulated_points
+                        tx["point_details"]["phone_number"] = phone_number
+                        tx["point_details"]["accumulated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        updated = True
+                        break
+                
+                if updated:
+                    f.seek(0)
+                    json.dump(data, f, ensure_ascii=False, indent=4)
+                    f.truncate()
+                    return True
+                return False
+        except Exception as e:
+            print(f"Error updating point accumulation: {e}")
+            return False
+
     def get_transaction_by_barcode(self, barcode):
         try:
             with open(self.file_path, 'r', encoding='utf-8') as f:

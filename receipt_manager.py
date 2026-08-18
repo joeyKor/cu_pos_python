@@ -3,13 +3,13 @@ import json
 import os
 
 class ReceiptManager:
-    def __init__(self, store_name="DU 순천점"):
+    def __init__(self, store_name="DU 홍익점"):
         os.makedirs("json", exist_ok=True)
         self.config_path = os.path.join("json", "store_info.json")
         self.default_info = {
-            "store_name": "DU 순천점",
+            "store_name": "DU 홍익점",
             "biz_num": "8522100347",
-            "address": "전라남도 순천시 조례동 312",
+            "address": "전라남도 홍익시 홍익동 312",
             "owner": "홍길동",
             "tel": "0315115187"
         }
@@ -223,19 +223,40 @@ class ReceiptManager:
                 <tr><td colspan="3">쿠폰번호: {coupon_code}</td></tr>
                 """
             elif method == "MobilePay":
+                is_qr = details.get("is_qr", False)
                 account_num = details.get("account_number", "010-****-****-**")
-                # Mask account number
-                if len(account_num) >= 13:
-                    account_num = f"{account_num[:4]}****-{account_num[9:13]}**"
-                payment_info_html += f"""
-                <tr>
-                    <td class="bold">모바일 (DU머니)</td>
-                    <td colspan="2" class="col-amt bold">{amt:,}</td>
-                </tr>
-                <tr><td colspan="3" class="center">********* DU머니 결제 *********</td></tr>
-                <tr><td colspan="3">결제계좌: {account_num}</td></tr>
-                <tr><td colspan="3">거래유형: 회원 번호 결제</td></tr>
-                """
+                # Fallback check if it's not a standard phone format (starts with 010)
+                if not is_qr and account_num and not account_num.startswith("010"):
+                    is_qr = True
+                    
+                if is_qr:
+                    # External Pay (e.g. KakaoPay, NaverPay, TossPay, etc.)
+                    # Mask the approval number/barcode number if long
+                    masked_acc = account_num
+                    if len(masked_acc) >= 8:
+                        masked_acc = masked_acc[:4] + "****" + masked_acc[8:]
+                    payment_info_html += f"""
+                    <tr>
+                        <td class="bold">모바일 (간편결제)</td>
+                        <td colspan="2" class="col-amt bold">{amt:,}</td>
+                    </tr>
+                    <tr><td colspan="3" class="center">********* 간편결제 승인 *********</td></tr>
+                    <tr><td colspan="3">승인번호: {masked_acc}</td></tr>
+                    <tr><td colspan="3">거래유형: 모바일 간편결제</td></tr>
+                    """
+                else:
+                    # DU머니
+                    if len(account_num) >= 13:
+                        account_num = f"{account_num[:4]}****-{account_num[9:13]}**"
+                    payment_info_html += f"""
+                    <tr>
+                        <td class="bold">모바일 (DU머니)</td>
+                        <td colspan="2" class="col-amt bold">{amt:,}</td>
+                    </tr>
+                    <tr><td colspan="3" class="center">********* DU머니 결제 *********</td></tr>
+                    <tr><td colspan="3">결제계좌: {account_num}</td></tr>
+                    <tr><td colspan="3">거래유형: 회원 번호 결제</td></tr>
+                    """
             else: # Cash
                 recv = details.get("received_amt", amt)
                 chg = details.get("change_amt", 0)

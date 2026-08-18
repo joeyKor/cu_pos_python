@@ -629,20 +629,3 @@ class WelcomePage(QWidget):
         except Exception:
             pass
 
-    def showEvent(self, event):
-        super().showEvent(event)
-        self.play_welcome_tts()
-
-    def play_welcome_tts(self):
-        import os
-        from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-        from PyQt6.QtCore import QUrl
-        
-        audio_path = os.path.abspath(os.path.join("assets", "audio", "welcome_tts.mp3"))
-        if os.path.exists(audio_path):
-            self.welcome_player = QMediaPlayer()
-            self.welcome_audio_output = QAudioOutput()
-            self.welcome_player.setAudioOutput(self.welcome_audio_output)
-            self.welcome_player.setSource(QUrl.fromLocalFile(audio_path))
-            self.welcome_player.play()
-

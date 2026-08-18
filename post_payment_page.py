@@ -39,10 +39,11 @@ class PostPaymentPage(QWidget):
 
         # --- LEFT: Receipt Illustration ---
         self.receipt_label = QLabel()
-        asset_path = resource_path(os.path.join("assets", "du_3.png"))
+        asset_path = resource_path(os.path.join("assets", "image", "du_3.png"))
         if os.path.exists(asset_path):
             pix = QPixmap(asset_path).scaled(styles.s(500), styles.s(500), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
             self.receipt_label.setPixmap(pix)
+            self.receipt_label.setStyleSheet("border: none; background: transparent;")
         else:
             self.receipt_label.setText("📄\n[영수증 스캔 이미지]")
             self.receipt_label.setStyleSheet(f"font-size: {styles.fs(30)}; border: 2px solid #E0E0E0; padding: 20px; border-radius: 10px; color: #999;")
@@ -278,7 +279,9 @@ class PostPaymentOptionDialog(QDialog):
 
         # Map to symbols: 💳 (Discount/Cards), 💎 (Points), 📄 (Receipt)
         self.btn_discount = create_option_button("제휴할인", "💳")
+        self.btn_discount.clicked.connect(self.handle_discount_clicked)
         self.btn_points = create_option_button("포인트 적립", "💎")
+        self.btn_points.clicked.connect(self.handle_points_clicked)
         self.btn_receipt = create_option_button("현금영수증", "📄", "#5C6BC0")
         self.btn_receipt.clicked.connect(self.handle_receipt_clicked)
 
@@ -313,7 +316,69 @@ class PostPaymentOptionDialog(QDialog):
         
         layout.addWidget(body)
 
+    def handle_discount_clicked(self):
+        from payment_ui import AffiliateDiscountDialog
+        total_amt = self.tx_data.get("total_amt", 0)
+        dialog = AffiliateDiscountDialog(total_amt, self)
+        dialog.exec()
+
+    def handle_points_clicked(self):
+        from ui_components import CustomMessageDialog
+        from payment_ui import AffiliateDiscountDialog
+        
+        # Check if already accumulated points
+        if self.tx_data.get("point_details"):
+            CustomMessageDialog(
+                "적립 불가",
+                "이미 포인트가 적립된 거래 내역입니다.\n(중복 적립 불가)",
+                "warning",
+                self
+            ).exec()
+            return
+            
+        total_amt = self.tx_data.get("total_amt", 0)
+        dialog = AffiliateDiscountDialog(total_amt, self)
+        # Set default to DU포인트
+        dialog.combo_issuer.setCurrentText("DU포인트")
+        
+        if dialog.exec():
+            # If point accumulation was chosen
+            if dialog.card_issuer == "DU포인트" or dialog.txt_card_number.text().strip():
+                phone_or_card = dialog.card_number or dialog.txt_card_number.text().strip()
+                accum_points = int(total_amt * 0.01)
+                if accum_points < 1:
+                    accum_points = 1
+                    
+                tx_barcode = self.tx_data.get("tx_barcode")
+                if tx_barcode and self.parent() and hasattr(self.parent(), 'transaction_manager'):
+                    self.parent().transaction_manager.update_point_accumulation(tx_barcode, phone_or_card, accum_points)
+                    
+                self.tx_data["point_details"] = {
+                    "accumulated_points": accum_points,
+                    "phone_number": phone_or_card
+                }
+                self.accept()
+
     def handle_receipt_clicked(self):
+        from ui_components import CustomMessageDialog
+        
+        # Check if already issued
+        existing_receipt_id = self.tx_data.get("payment_details", {}).get("receipt_id")
+        if not existing_receipt_id:
+            for p in self.tx_data.get("payments", []):
+                if p.get("method") == "Cash" and p.get("details", {}).get("receipt_id"):
+                    existing_receipt_id = p.get("details", {}).get("receipt_id")
+                    break
+                    
+        if existing_receipt_id:
+            CustomMessageDialog(
+                "발급 불가", 
+                f"이미 현금영수증이 발급된 거래 내역입니다.\n(승인번호: {existing_receipt_id})\n\n재발급/수정이 필요하신 경우 영수증 환불 후 재결제해주세요.", 
+                "warning", 
+                self
+            ).exec()
+            return
+
         payments = self.tx_data.get("payments", [])
         cash_amt = 0
         if payments:
@@ -325,7 +390,6 @@ class PostPaymentOptionDialog(QDialog):
                 cash_amt = self.tx_data.get("total_amt", 0)
                 
         if cash_amt <= 0:
-            from ui_components import CustomMessageDialog
             CustomMessageDialog("발급 불가", "현금으로 결제한 금액이 없습니다.\n현금 결제건만 현금영수증 발급이 가능합니다.", 'warning', self).exec()
             return
             
@@ -336,7 +400,10 @@ class PostPaymentOptionDialog(QDialog):
                 tx_barcode = self.tx_data.get("tx_barcode")
                 if tx_barcode and self.parent():
                     self.parent().transaction_manager.update_cash_receipt(tx_barcode, dialog.receipt_id)
-                from ui_components import CustomMessageDialog
+                if "payment_details" not in self.tx_data or self.tx_data["payment_details"] is None:
+                    self.tx_data["payment_details"] = {}
+                self.tx_data["payment_details"]["receipt_id"] = dialog.receipt_id
+                
                 CustomMessageDialog("발급 완료", f"현금영수증이 발급되었습니다.\n승인번호: {dialog.receipt_id}", 'info', self).exec()
                 self.accept()
 

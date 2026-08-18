@@ -1,4 +1,4 @@
-import sys, os, random, datetime, pyttsx3, asyncio, hashlib, edge_tts
+import sys, os, random, datetime
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, 
                              QLabel, QLineEdit, QGridLayout, QFrame, QAbstractItemView, 
@@ -61,7 +61,6 @@ def patched_mousePressEvent(self, event):
 QPushButton.mousePressEvent = patched_mousePressEvent
 
 class POSMainWindow(QMainWindow):
-    tts_play_signal = pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -90,15 +89,6 @@ class POSMainWindow(QMainWindow):
         self.product_manager = ProductManager()
         self.transaction_manager = TransactionManager()
         self.receipt_manager = ReceiptManager()
-        
-        # Initialize TTS Queue and Background Thread
-        import queue
-        import threading
-        self.tts_queue = queue.Queue()
-        self.tts_play_signal.connect(self._play_tts_file)
-        self.tts_thread = threading.Thread(target=self._tts_worker, daemon=True)
-        self.tts_thread.start()
-        
         self.tm = self.transaction_manager
         self.rm = self.receipt_manager
         self.wait_slots = [None, None, None]
@@ -1309,11 +1299,10 @@ class POSMainWindow(QMainWindow):
         if not found:
             self.cart.append({"barcode": barcode, "qty": 1})
             
-        # Promotion Alert (TTS & On-screen inline highlight)
+        # Promotion Alert (On-screen inline highlight)
         promo_type = product.get("promo_type", 0)
         if promo_type in [1, 2]:
             promo_name = "1+1" if promo_type == 1 else "2+1"
-            tts_name = "원플러스원" if promo_type == 1 else "투플러스원"
             
             # Highlight color (Red for 1+1, Orange for 2+1)
             color = "#D32F2F" if promo_type == 1 else "#F59E0B"
@@ -1343,7 +1332,6 @@ class POSMainWindow(QMainWindow):
                 self.lbl_promo_img.clear()
                 
             QApplication.processEvents() # Update UI to show text immediately
-            self.speak(f"{tts_name} 상품입니다.")
             
             # Clear message and image after 3 seconds
             QTimer.singleShot(3000, lambda: (self.lbl_promo_info.setText(""), self.lbl_promo_img.clear()))
@@ -1353,73 +1341,6 @@ class POSMainWindow(QMainWindow):
 
         self.update_table_view()
         self.update_totals()
-
-    def speak(self, text):
-        import os
-        audio_dir = os.path.abspath(os.path.join("assets", "audio"))
-        pregenerated = {
-            "원플러스원 상품입니다.": os.path.join(audio_dir, "promo_1plus1.mp3"),
-            "투플러스원 상품입니다.": os.path.join(audio_dir, "promo_2plus1.mp3"),
-            "현금영수증 필요하세요?": os.path.join(audio_dir, "cash_receipt_tts.mp3"),
-            "어서오세요. 디유입니다.": os.path.join(audio_dir, "welcome_tts.mp3")
-        }
-        audio_file = pregenerated.get(text)
-        if audio_file and os.path.exists(audio_file):
-            self._play_tts_file(audio_file)
-        else:
-            self.tts_queue.put(text)
-
-    def _play_tts_file(self, audio_file):
-        if os.path.exists(audio_file):
-            from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-            from PyQt6.QtCore import QUrl
-            if not hasattr(self, 'active_tts_player') or self.active_tts_player is None:
-                self.active_tts_audio_output = QAudioOutput(self)
-                self.active_tts_player = QMediaPlayer(self)
-                self.active_tts_player.setAudioOutput(self.active_tts_audio_output)
-            self.active_tts_audio_output.setVolume(1.0)
-            self.active_tts_player.stop()
-            self.active_tts_player.setSource(QUrl.fromLocalFile(audio_file))
-            self.active_tts_player.play()
-
-    def _tts_worker(self):
-        import os, asyncio, hashlib
-        audio_dir = os.path.abspath(os.path.join("assets", "audio"))
-        os.makedirs(audio_dir, exist_ok=True)
-
-        pregenerated = {
-            "원플러스원 상품입니다.": os.path.join(audio_dir, "promo_1plus1.mp3"),
-            "투플러스원 상품입니다.": os.path.join(audio_dir, "promo_2plus1.mp3"),
-            "현금영수증 필요하세요?": os.path.join(audio_dir, "cash_receipt_tts.mp3"),
-            "어서오세요. 디유입니다.": os.path.join(audio_dir, "welcome_tts.mp3")
-        }
-
-        while True:
-            text = self.tts_queue.get()
-            if text is None:
-                break
-            try:
-                if text in pregenerated and os.path.exists(pregenerated[text]):
-                    audio_file = pregenerated[text]
-                else:
-                    text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
-                    audio_file = os.path.join(audio_dir, f"tts_{text_hash}.mp3")
-                    if not os.path.exists(audio_file):
-                        try:
-                            async def gen():
-                                c = edge_tts.Communicate(text, 'ko-KR-SunHiNeural')
-                                await c.save(audio_file)
-                            asyncio.run(gen())
-                        except Exception:
-                            pass
-
-                if os.path.exists(audio_file):
-                    self.tts_play_signal.emit(audio_file)
-            except Exception:
-                pass
-            finally:
-                self.tts_queue.task_done()
-
     def update_table_view(self):
         self.table.setRowCount(len(self.cart))
         
@@ -1841,7 +1762,8 @@ class POSMainWindow(QMainWindow):
                 "amount": paid_now,
                 "details": {
                     "account_number": details["account_number"],
-                    "balance_after": details["balance_after"]
+                    "balance_after": details["balance_after"],
+                    "is_qr": details.get("is_qr", False)
                 }
             })
             if hasattr(self, 'btn_mobile_pay'): self.btn_mobile_pay.set_checked(True)
@@ -1984,7 +1906,7 @@ class POSMainWindow(QMainWindow):
         self.update_totals()
 
     def handle_refund_barcode(self, barcode):
-        if len(barcode) != 16:
+        if len(barcode) not in (16, 20):
             return
             
         tx = self.transaction_manager.get_transaction_by_barcode(barcode)

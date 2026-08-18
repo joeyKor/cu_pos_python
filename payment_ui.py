@@ -1115,42 +1115,49 @@ class TransitCardDialog(QDialog):
     def init_main_menu(self):
         self.menu_widget = QWidget()
         lyt = QVBoxLayout(self.menu_widget)
-        lyt.setContentsMargins(styles.s(25), styles.s(30), styles.s(25), styles.s(30))
+        lyt.setContentsMargins(styles.s(25), styles.s(25), styles.s(25), styles.s(25))
         lyt.setSpacing(styles.s(20))
         
         # Guide Label
         lbl_guide = QLabel("원하시는 서비스를 선택하세요")
         lbl_guide.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_guide.setStyleSheet(f"font-size: {styles.fs(14)}; font-weight: bold; color: #374151; font-family: '{styles.FONT_FAMILY}';")
+        lbl_guide.setStyleSheet(f"font-size: {styles.fs(15)}; font-weight: bold; color: #374151; font-family: '{styles.FONT_FAMILY}'; border: none; background: transparent;")
         lyt.addWidget(lbl_guide)
+        
+        lyt.addStretch(1)
         
         # Grid for two large buttons
         btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(styles.s(15))
+        btn_layout.setSpacing(styles.s(20))
         
         # 1. Charge Button
         self.btn_goto_charge = QPushButton()
         self.btn_goto_charge.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_goto_charge.setFixedHeight(styles.s(180))
+        self.btn_goto_charge.setFixedHeight(styles.s(200))
         self.btn_goto_charge.setStyleSheet(f"""
             QPushButton {{
                 background-color: #EDE9FE;
                 border: 2px solid #C4B5FD;
-                border-radius: {styles.s(12)}px;
+                border-radius: {styles.s(14)}px;
+                outline: none;
             }}
             QPushButton:hover {{
                 background-color: #DDD6FE;
                 border: 2px solid #A78BFA;
             }}
+            QPushButton QLabel {{
+                border: none;
+                background: transparent;
+            }}
         """)
         c_layout = QVBoxLayout(self.btn_goto_charge)
         c_layout.setContentsMargins(styles.s(15), styles.s(20), styles.s(15), styles.s(20))
-        c_layout.setSpacing(styles.s(10))
+        c_layout.setSpacing(styles.s(12))
         c_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         lbl_c_icon = QLabel("⚡")
         lbl_c_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_c_icon.setStyleSheet(f"font-size: {styles.fs(36)}; background: transparent; border: none;")
+        lbl_c_icon.setStyleSheet(f"font-size: {styles.fs(38)}; background: transparent; border: none; color: #D97706;")
         
         lbl_c_title = QLabel("교통카드 충전")
         lbl_c_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1158,7 +1165,7 @@ class TransitCardDialog(QDialog):
         
         lbl_c_desc = QLabel("현금을 투입하고\n카드를 충전합니다")
         lbl_c_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_c_desc.setStyleSheet(f"font-size: {styles.fs(11)}; color: #6D28D9; background: transparent; border: none;")
+        lbl_c_desc.setStyleSheet(f"font-size: {styles.fs(11.5)}; color: #6D28D9; background: transparent; border: none;")
         
         c_layout.addWidget(lbl_c_icon)
         c_layout.addWidget(lbl_c_title)
@@ -1168,26 +1175,31 @@ class TransitCardDialog(QDialog):
         # 2. Refund Button
         self.btn_goto_refund = QPushButton()
         self.btn_goto_refund.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_goto_refund.setFixedHeight(styles.s(180))
+        self.btn_goto_refund.setFixedHeight(styles.s(200))
         self.btn_goto_refund.setStyleSheet(f"""
             QPushButton {{
                 background-color: #FEF3C7;
                 border: 2px solid #FDE68A;
-                border-radius: {styles.s(12)}px;
+                border-radius: {styles.s(14)}px;
+                outline: none;
             }}
             QPushButton:hover {{
                 background-color: #FDE68A;
                 border: 2px solid #FCD34D;
             }}
+            QPushButton QLabel {{
+                border: none;
+                background: transparent;
+            }}
         """)
         r_layout = QVBoxLayout(self.btn_goto_refund)
         r_layout.setContentsMargins(styles.s(15), styles.s(20), styles.s(15), styles.s(20))
-        r_layout.setSpacing(styles.s(10))
+        r_layout.setSpacing(styles.s(12))
         r_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         lbl_r_icon = QLabel("🪙")
         lbl_r_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_r_icon.setStyleSheet(f"font-size: {styles.fs(36)}; background: transparent; border: none;")
+        lbl_r_icon.setStyleSheet(f"font-size: {styles.fs(38)}; background: transparent; border: none;")
         
         lbl_r_title = QLabel("교통카드 환불")
         lbl_r_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1195,17 +1207,17 @@ class TransitCardDialog(QDialog):
         
         lbl_r_desc = QLabel("카드 잔액을 차감하고\n현금으로 환불합니다")
         lbl_r_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_r_desc.setStyleSheet(f"font-size: {styles.fs(11)}; color: #92400E; background: transparent; border: none;")
+        lbl_r_desc.setStyleSheet(f"font-size: {styles.fs(11.5)}; color: #92400E; background: transparent; border: none;")
         
         r_layout.addWidget(lbl_r_icon)
         r_layout.addWidget(lbl_r_title)
         r_layout.addWidget(lbl_r_desc)
         self.btn_goto_refund.clicked.connect(self.show_refund)
         
-        btn_layout.addWidget(self.btn_goto_charge)
-        btn_layout.addWidget(self.btn_goto_refund)
+        btn_layout.addWidget(self.btn_goto_charge, stretch=1)
+        btn_layout.addWidget(self.btn_goto_refund, stretch=1)
         lyt.addLayout(btn_layout)
-        lyt.addStretch()
+        lyt.addStretch(1)
         
     def init_charge_screen(self):
         self.charge_widget = QWidget()
@@ -1566,49 +1578,6 @@ class CashReceiptDialog(QDialog):
         self.change_amount = max(0, received_amount - target_amount)
         self.receipt_issued = False
         self.receipt_id = ""
-        
-        import os, threading, subprocess
-        possible_paths = [
-            os.path.abspath(os.path.join("assets", "audio", "cash_receipt_tts.mp3")),
-            os.path.abspath(os.path.join("assets", "audio", "현금영수증.mp3")),
-            os.path.abspath(os.path.join("assets", "audio", "현금.mp3"))
-        ]
-        audio_path = next((p for p in possible_paths if os.path.exists(p)), None)
-        
-        if audio_path and os.path.exists(audio_path):
-            from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
-            from PyQt6.QtCore import QUrl
-            
-            main_win = parent
-            while main_win and not hasattr(main_win, 'clear_cart'):
-                if hasattr(main_win, 'parent') and main_win.parent():
-                    main_win = main_win.parent()
-                else:
-                    break
-            
-            self.player = QMediaPlayer()
-            self.audio_output = QAudioOutput()
-            self.player.setAudioOutput(self.audio_output)
-            self.player.setSource(QUrl.fromLocalFile(audio_path))
-            self.player.play()
-            
-            if main_win:
-                main_win.active_audio_player = self.player
-                main_win.active_audio_output = self.audio_output
-        else:
-            def speak_tts():
-                try:
-                    import pythoncom, pyttsx3
-                    pythoncom.CoInitialize()
-                    engine = pyttsx3.init()
-                    engine.say("현금영수증 필요하세요?")
-                    engine.runAndWait()
-                except Exception:
-                    try:
-                        subprocess.run(['powershell', '-Command', 'Add-Type -AssemblyName System.Speech; (New-Object System.Speech.Synthesis.SpeechSynthesizer).Speak("현금영수증 필요하세요?")'], creationflags=0x08000000)
-                    except Exception:
-                        pass
-            threading.Thread(target=speak_tts, daemon=True).start()
         
         # Main Container
         self.container = QFrame(self)
@@ -2576,9 +2545,12 @@ class CuPointPhoneLookupDialog(QDialog):
         lbl_hbox.addWidget(lbl_text)
         
         self.txt_phone = QLineEdit()
+        self.txt_phone.setMaxLength(13)
         self.txt_phone.setText("010-")
         self.txt_phone.setFixedHeight(styles.s(45))
         self.txt_phone.setStyleSheet("QLineEdit { background-color: white; border: none; font-size: 13pt; font-weight: bold; padding-left: 15px; font-family: 'Malgun Gothic'; color: #212121; }")
+        self.txt_phone.textChanged.connect(self.format_phone_input)
+        self.txt_phone.returnPressed.connect(self.process_confirm)
         self.txt_phone.setFocus()
         self.txt_phone.setCursorPosition(4)
         
@@ -2631,11 +2603,32 @@ class CuPointPhoneLookupDialog(QDialog):
         vbox.addLayout(bottom_layout)
         
         layout.addWidget(content)
+
+    def format_phone_input(self, text):
+        # Extract digits only
+        digits = "".join(filter(str.isdigit, text))
+        if len(digits) > 11:
+            digits = digits[:11]
+            
+        formatted = ""
+        if len(digits) <= 3:
+            formatted = digits
+        elif len(digits) <= 7:
+            formatted = f"{digits[:3]}-{digits[3:]}"
+        else:
+            formatted = f"{digits[:3]}-{digits[3:7]}-{digits[7:]}"
+            
+        if formatted != text:
+            self.txt_phone.blockSignals(True)
+            self.txt_phone.setText(formatted)
+            self.txt_phone.setCursorPosition(len(formatted))
+            self.txt_phone.blockSignals(False)
         
     def process_confirm(self):
         val = self.txt_phone.text().strip()
-        if not val or val == "010-":
-            CustomMessageDialog("오류", "휴대전화번호를 입력해주세요.", 'warning', self).exec()
+        digits = "".join(filter(str.isdigit, val))
+        if len(digits) < 10:
+            CustomMessageDialog("오류", "휴대전화번호를 정확히 입력해주세요 (10~11자리).", 'warning', self).exec()
             self.txt_phone.setFocus()
             return
         

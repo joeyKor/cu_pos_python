@@ -186,47 +186,55 @@ class TransitCardPage(QWidget):
     def init_menu_screen(self):
         self.menu_widget = QWidget()
         layout = QVBoxLayout(self.menu_widget)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(30)
+        layout.setContentsMargins(30, 30, 30, 30)
+        layout.setSpacing(25)
         
         lbl_guide = QLabel("원하시는 서비스를 선택하세요")
         lbl_guide.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_guide.setStyleSheet("font-size: 16pt; font-weight: bold; color: #374151;")
+        lbl_guide.setStyleSheet("font-size: 18pt; font-weight: bold; color: #374151; border: none; background: transparent;")
         layout.addWidget(lbl_guide)
         
+        layout.addStretch(1)
+        
         btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(25)
+        btn_layout.setSpacing(30)
         
         # Large Charge Button
         self.btn_goto_charge = QPushButton()
         self.btn_goto_charge.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_goto_charge.setFixedHeight(styles.s(220))
-        self.btn_goto_charge.setStyleSheet("""
-            QPushButton {
+        self.btn_goto_charge.setFixedHeight(styles.s(240))
+        self.btn_goto_charge.setStyleSheet(f"""
+            QPushButton {{
                 background-color: #EDE9FE;
                 border: 2px solid #C4B5FD;
-                border-radius: 12px;
-            }
-            QPushButton:hover {
+                border-radius: {styles.s(16)}px;
+                outline: none;
+            }}
+            QPushButton:hover {{
                 background-color: #DDD6FE;
-                border-color: #A78BFA;
-            }
+                border: 2px solid #A78BFA;
+            }}
+            QPushButton QLabel {{
+                border: none;
+                background: transparent;
+            }}
         """)
         c_layout = QVBoxLayout(self.btn_goto_charge)
         c_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        c_layout.setSpacing(15)
+        c_layout.setSpacing(styles.s(15))
+        c_layout.setContentsMargins(styles.s(20), styles.s(20), styles.s(20), styles.s(20))
         
         lbl_c_icon = QLabel("⚡")
         lbl_c_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_c_icon.setStyleSheet("font-size: 40pt; background: transparent;")
+        lbl_c_icon.setStyleSheet(f"font-size: {styles.fs(42)}; background: transparent; border: none; color: #D97706;")
         
         lbl_c_title = QLabel("교통카드 충전")
         lbl_c_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_c_title.setStyleSheet("font-size: 18pt; font-weight: bold; color: #4C1D95; background: transparent;")
+        lbl_c_title.setStyleSheet(f"font-size: {styles.fs(19)}; font-weight: bold; color: #4C1D95; background: transparent; border: none;")
         
         lbl_c_desc = QLabel("현금을 투입하고\n카드를 충전합니다")
         lbl_c_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_c_desc.setStyleSheet("font-size: 11pt; color: #6D28D9; background: transparent;")
+        lbl_c_desc.setStyleSheet(f"font-size: {styles.fs(12)}; color: #6D28D9; background: transparent; border: none;")
         
         c_layout.addWidget(lbl_c_icon)
         c_layout.addWidget(lbl_c_title)
@@ -236,44 +244,50 @@ class TransitCardPage(QWidget):
         # Large Refund Button
         self.btn_goto_refund = QPushButton()
         self.btn_goto_refund.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_goto_refund.setFixedHeight(styles.s(220))
-        self.btn_goto_refund.setStyleSheet("""
-            QPushButton {
+        self.btn_goto_refund.setFixedHeight(styles.s(240))
+        self.btn_goto_refund.setStyleSheet(f"""
+            QPushButton {{
                 background-color: #FEF3C7;
                 border: 2px solid #FDE68A;
-                border-radius: 12px;
-            }
-            QPushButton:hover {
+                border-radius: {styles.s(16)}px;
+                outline: none;
+            }}
+            QPushButton:hover {{
                 background-color: #FDE68A;
-                border-color: #FCD34D;
-            }
+                border: 2px solid #FCD34D;
+            }}
+            QPushButton QLabel {{
+                border: none;
+                background: transparent;
+            }}
         """)
         r_layout = QVBoxLayout(self.btn_goto_refund)
         r_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        r_layout.setSpacing(15)
+        r_layout.setSpacing(styles.s(15))
+        r_layout.setContentsMargins(styles.s(20), styles.s(20), styles.s(20), styles.s(20))
         
         lbl_r_icon = QLabel("🪙")
         lbl_r_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_r_icon.setStyleSheet("font-size: 40pt; background: transparent;")
+        lbl_r_icon.setStyleSheet(f"font-size: {styles.fs(42)}; background: transparent; border: none;")
         
         lbl_r_title = QLabel("교통카드 환불")
         lbl_r_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_r_title.setStyleSheet("font-size: 18pt; font-weight: bold; color: #78350F; background: transparent;")
+        lbl_r_title.setStyleSheet(f"font-size: {styles.fs(19)}; font-weight: bold; color: #78350F; background: transparent; border: none;")
         
         lbl_r_desc = QLabel("카드 잔액을 차감하고\n현금으로 환불합니다")
         lbl_r_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl_r_desc.setStyleSheet("font-size: 11pt; color: #92400E; background: transparent;")
+        lbl_r_desc.setStyleSheet(f"font-size: {styles.fs(12)}; color: #92400E; background: transparent; border: none;")
         
         r_layout.addWidget(lbl_r_icon)
         r_layout.addWidget(lbl_r_title)
         r_layout.addWidget(lbl_r_desc)
         self.btn_goto_refund.clicked.connect(self.show_refund)
         
-        btn_layout.addWidget(self.btn_goto_charge)
-        btn_layout.addWidget(self.btn_goto_refund)
+        btn_layout.addWidget(self.btn_goto_charge, stretch=1)
+        btn_layout.addWidget(self.btn_goto_refund, stretch=1)
         
         layout.addLayout(btn_layout)
-        layout.addStretch()
+        layout.addStretch(1)
         
     def init_charge_screen(self):
         self.charge_widget = QWidget()
