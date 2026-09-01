@@ -24,6 +24,7 @@ from parcel_service_page import ParcelServicePage
 from transaction_manager import TransactionManager
 from receipt_manager import ReceiptManager
 from post_payment_page import PostPaymentPage, PostPaymentOptionDialog
+from cash_drawer_manager import CashDrawerManager
 
 # Globally monkey-patch QPushButton to play an asynchronous beep sound on click
 import threading
@@ -1640,6 +1641,9 @@ class POSMainWindow(QMainWindow):
             CustomMessageDialog("알림", "이미 결제가 완료되었습니다.", 'info', self).exec()
             return
             
+        # 금전문함(금고/돈통) 자동 오픈
+        CashDrawerManager.open_drawer_async()
+
         dialog = CashPaymentDialog(remaining, self)
         if dialog.exec():
             paid_now = dialog.received_amount

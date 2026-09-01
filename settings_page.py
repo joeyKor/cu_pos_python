@@ -1,12 +1,13 @@
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, 
                              QTableWidgetItem, QLabel, QLineEdit, QPushButton, 
-                             QHeaderView, QWidget, QComboBox, QAbstractItemView, QFrame, QScrollArea, QCheckBox, QTabWidget, QApplication, QGridLayout, QGraphicsDropShadowEffect)
+                             QHeaderView, QWidget, QComboBox, QAbstractItemView, QFrame, QScrollArea, QCheckBox, QTabWidget, QApplication, QGridLayout, QGraphicsDropShadowEffect, QRadioButton)
 import os
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QTimer
 from PyQt6.QtGui import QPixmap, QColor
 import styles
 from product_manager import ProductManager, CATEGORIES
 from ui_components import CustomMessageDialog
+from cash_drawer_manager import cash_drawer
 
 class ProductRegistrationDialog(QDialog):
     """
@@ -650,11 +651,13 @@ class ProductRegistrationDialog(QDialog):
 
 class SettingsPage(QWidget):
     backRequested = pyqtSignal()
+    drawerTestResult = pyqtSignal(bool, str)
 
     def __init__(self, product_manager, receipt_manager, parent=None):
         super().__init__(parent)
         self.product_manager: ProductManager = product_manager
         self.receipt_manager = receipt_manager
+        self.drawerTestResult.connect(self.on_drawer_test_finished)
         self.current_editing_barcode = None # Track currently editing item
         self.current_editing_v_barcode = None # Track currently editing voucher item
         self.selected_image_path = None
@@ -794,6 +797,11 @@ class SettingsPage(QWidget):
         card_lyt.addLayout(btn_row)
         
         self.system_tab_layout.addWidget(mode_card)
+        
+        # Cash Drawer Settings Group
+        self.drawer_card = self.create_drawer_settings_card()
+        self.system_tab_layout.addWidget(self.drawer_card)
+        
         self.system_tab_layout.addStretch()
         
         self.tab_widget.addTab(self.system_tab, "시스템 설정")
@@ -2653,3 +2661,236 @@ class SettingsPage(QWidget):
             size = win.geometry()
             win.move((screen.width() - size.width()) // 2, (screen.height() - size.height()) // 2)
             CustomMessageDialog("화면 설정", "창 화면 모드로 전환되었습니다.", 'info', self).exec()
+
+    def create_drawer_settings_card(self):
+        drawer_card = QFrame()
+        drawer_card.setStyleSheet("""
+            QFrame {
+                background-color: white;
+                border: 1px solid #E2E8F0;
+                border-radius: 12px;
+            }
+        """)
+        d_lyt = QVBoxLayout(drawer_card)
+        d_lyt.setContentsMargins(25, 25, 25, 25)
+        d_lyt.setSpacing(15)
+
+        lbl_drawer_title = QLabel("💰 금전문함(돈통/금고) 설정")
+        lbl_drawer_title.setStyleSheet("font-size: 16pt; font-weight: bold; color: #1E293B; border: none;")
+        d_lyt.addWidget(lbl_drawer_title)
+
+        lbl_drawer_desc = QLabel("현금 결제 시 자동으로 금고(돈통)가 열리도록 연동합니다. COM 포트 및 연결 방식을 설정하고 직접 열기 테스트를 할 수 있습니다.")
+        lbl_drawer_desc.setStyleSheet("font-size: 11pt; color: #64748B; border: none;")
+        d_lyt.addWidget(lbl_drawer_desc)
+
+        # Mode Selection
+        mode_box = QHBoxLayout()
+        mode_box.setSpacing(20)
+        
+        self.rb_drawer_serial = QRadioButton("USB / 시리얼 오픈기 (추천)")
+        self.rb_drawer_serial.setStyleSheet("font-size: 11pt; font-weight: bold; color: #334155; border: none;")
+        self.rb_drawer_printer = QRadioButton("영수증 프린터 방식")
+        self.rb_drawer_printer.setStyleSheet("font-size: 11pt; font-weight: bold; color: #334155; border: none;")
+        
+        cfg = cash_drawer.config
+        current_mode = cfg.get("mode", "serial")
+        if current_mode == "printer":
+            self.rb_drawer_printer.setChecked(True)
+        else:
+            self.rb_drawer_serial.setChecked(True)
+            
+        self.rb_drawer_serial.toggled.connect(self.on_drawer_mode_changed)
+        self.rb_drawer_printer.toggled.connect(self.on_drawer_mode_changed)
+        
+        mode_box.addWidget(self.rb_drawer_serial)
+        mode_box.addWidget(self.rb_drawer_printer)
+        mode_box.addStretch()
+        d_lyt.addLayout(mode_box)
+
+        # Device Selection Row
+        dev_row = QHBoxLayout()
+        dev_row.setSpacing(10)
+        
+        self.lbl_device_title = QLabel("COM 포트:")
+        self.lbl_device_title.setStyleSheet("font-size: 11pt; font-weight: bold; color: #334155; min-width: 80px; border: none;")
+        
+        self.cb_drawer_device = QComboBox()
+        self.cb_drawer_device.setFixedHeight(40)
+        self.cb_drawer_device.setStyleSheet(f"""
+            QComboBox {{
+                background-color: #F8FAFC;
+                border: 1px solid #CBD5E1;
+                border-radius: 6px;
+                padding: 5px 12px;
+                font-size: 11pt;
+                font-weight: bold;
+                color: #1E293B;
+            }}
+            QComboBox QAbstractItemView {{
+                background-color: white;
+                border: 1px solid #CBD5E1;
+                selection-background-color: {styles.PRIMARY_PURPLE};
+                selection-color: white;
+                color: #1E293B;
+            }}
+        """)
+        
+        btn_refresh_dev = QPushButton("🔄 새로고침")
+        btn_refresh_dev.setFixedSize(110, 40)
+        btn_refresh_dev.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_refresh_dev.setStyleSheet("""
+            QPushButton {
+                background-color: #F1F5F9;
+                color: #334155;
+                font-size: 10pt;
+                font-weight: bold;
+                border-radius: 6px;
+                border: 1px solid #CBD5E1;
+            }
+            QPushButton:hover { background-color: #E2E8F0; }
+        """)
+        btn_refresh_dev.clicked.connect(self.refresh_drawer_devices)
+        
+        dev_row.addWidget(self.lbl_device_title)
+        dev_row.addWidget(self.cb_drawer_device, stretch=1)
+        dev_row.addWidget(btn_refresh_dev)
+        d_lyt.addLayout(dev_row)
+
+        # Options Checkboxes
+        opt_row = QHBoxLayout()
+        opt_row.setSpacing(25)
+        
+        self.chk_drawer_auto = QCheckBox("현금 결제 시 금고 자동 열림")
+        self.chk_drawer_auto.setChecked(cfg.get("auto_open", True))
+        self.chk_drawer_auto.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: {styles.PRIMARY_PURPLE}; border: none;")
+        
+        self.chk_drawer_sound = QCheckBox("열림 효과음 재생")
+        self.chk_drawer_sound.setChecked(cfg.get("sound_enabled", True))
+        self.chk_drawer_sound.setStyleSheet(f"font-size: 11pt; font-weight: bold; color: {styles.PRIMARY_PURPLE}; border: none;")
+        
+        opt_row.addWidget(self.chk_drawer_auto)
+        opt_row.addWidget(self.chk_drawer_sound)
+        opt_row.addStretch()
+        d_lyt.addLayout(opt_row)
+
+        # Test and Save Action Buttons Row
+        action_row = QHBoxLayout()
+        action_row.setSpacing(15)
+        
+        btn_test_open = QPushButton("🔓 금전문함 열기 테스트")
+        btn_test_open.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_test_open.setFixedHeight(48)
+        btn_test_open.setStyleSheet("""
+            QPushButton {
+                background-color: #2563EB;
+                color: white;
+                font-size: 11pt;
+                font-weight: bold;
+                border-radius: 8px;
+                border: none;
+                padding: 0 20px;
+            }
+            QPushButton:hover { background-color: #1D4ED8; }
+            QPushButton:pressed { background-color: #1E40AF; }
+        """)
+        btn_test_open.clicked.connect(self.test_open_drawer)
+        
+        btn_save_drawer = QPushButton("💾 설정 저장")
+        btn_save_drawer.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_save_drawer.setFixedHeight(48)
+        btn_save_drawer.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {styles.PRIMARY_PURPLE};
+                color: white;
+                font-size: 11pt;
+                font-weight: bold;
+                border-radius: 8px;
+                border: none;
+                padding: 0 20px;
+            }}
+            QPushButton:hover {{ background-color: #6D28D9; }}
+        """)
+        btn_save_drawer.clicked.connect(self.save_drawer_settings)
+        
+        self.lbl_drawer_status = QLabel("")
+        self.lbl_drawer_status.setStyleSheet("font-size: 10pt; font-weight: bold; color: #16A34A; border: none;")
+        
+        action_row.addWidget(btn_test_open)
+        action_row.addWidget(btn_save_drawer)
+        action_row.addWidget(self.lbl_drawer_status, stretch=1)
+        d_lyt.addLayout(action_row)
+
+        self.refresh_drawer_devices()
+        return drawer_card
+
+    def on_drawer_mode_changed(self):
+        self.refresh_drawer_devices()
+
+    def refresh_drawer_devices(self):
+        is_serial = self.rb_drawer_serial.isChecked()
+        self.cb_drawer_device.clear()
+        
+        cfg = cash_drawer.config
+        if is_serial:
+            self.lbl_device_title.setText("COM 포트:")
+            ports = cash_drawer.get_available_ports()
+            if ports:
+                self.cb_drawer_device.addItems(ports)
+                saved_port = cfg.get("port", "COM6")
+                matched = False
+                for i, p in enumerate(ports):
+                    if p.startswith(saved_port):
+                        self.cb_drawer_device.setCurrentIndex(i)
+                        matched = True
+                        break
+                if not matched and ports:
+                    self.cb_drawer_device.setCurrentIndex(0)
+            else:
+                self.cb_drawer_device.addItem("연결된 COM 포트 없음")
+        else:
+            self.lbl_device_title.setText("프린터:")
+            printers = cash_drawer.get_available_printers()
+            if printers:
+                self.cb_drawer_device.addItems(printers)
+                saved_pr = cfg.get("printer_name", "")
+                if saved_pr in printers:
+                    self.cb_drawer_device.setCurrentText(saved_pr)
+                elif printers:
+                    self.cb_drawer_device.setCurrentIndex(0)
+            else:
+                self.cb_drawer_device.addItem("설치된 프린터 없음")
+
+    def save_drawer_settings(self):
+        is_serial = self.rb_drawer_serial.isChecked()
+        mode = "serial" if is_serial else "printer"
+        selected = self.cb_drawer_device.currentText()
+        
+        updates = {
+            "mode": mode,
+            "auto_open": self.chk_drawer_auto.isChecked(),
+            "sound_enabled": self.chk_drawer_sound.isChecked()
+        }
+        if is_serial:
+            if selected and not selected.startswith("연결된"):
+                updates["port"] = selected.split()[0]
+        else:
+            if selected and not selected.startswith("설치된"):
+                updates["printer_name"] = selected
+                
+        cash_drawer.save_config(updates)
+        self.lbl_drawer_status.setText("설정이 저장되었습니다.")
+        QTimer.singleShot(3000, lambda: self.lbl_drawer_status.setText(""))
+        CustomMessageDialog("설정 완료", "금전문함(돈통) 설정이 성공적으로 저장되었습니다.", 'info', self).exec()
+
+    def test_open_drawer(self):
+        self.lbl_drawer_status.setText("신호 전송 중...")
+        cash_drawer.open_drawer_async(callback=self.drawerTestResult.emit)
+
+    def on_drawer_test_finished(self, success, msg):
+        if success:
+            self.lbl_drawer_status.setText(f"열림 완료: {msg}")
+            CustomMessageDialog("열림 성공", f"금전문함(돈통)에 신호가 성공적으로 전송되었습니다.\n({msg})", 'info', self).exec()
+        else:
+            self.lbl_drawer_status.setText(f"오류: {msg}")
+            CustomMessageDialog("열림 실패", f"금전문함 신호 전송에 실패했습니다.\n오류: {msg}", 'warning', self).exec()
+        QTimer.singleShot(4000, lambda: self.lbl_drawer_status.setText(""))

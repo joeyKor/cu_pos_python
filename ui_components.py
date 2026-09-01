@@ -650,10 +650,16 @@ class CustomMessageDialog(QDialog):
         
         # Header (Color coded by type)
         header_color = styles.PRIMARY_PURPLE
+        hover_color = "#6D28D9"
+        active_color = "#5B21B6"
         if type == 'warning':
             header_color = "#FFA726" # Orange
+            hover_color = "#FB8C00"
+            active_color = "#F57C00"
         elif type == 'question':
             header_color = styles.ACCENT_GREEN
+            hover_color = styles.DARK_GREEN
+            active_color = "#1E3B33"
             
         header = QFrame()
         header.setStyleSheet(f"""
@@ -663,10 +669,36 @@ class CustomMessageDialog(QDialog):
         """)
         header.setFixedHeight(50)
         header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(15, 0, 15, 0)
+        
+        # Spacer on left to balance close button
+        left_spacer = QWidget()
+        left_spacer.setFixedSize(30, 30)
+        left_spacer.setStyleSheet("background: transparent; border: none;")
+        header_layout.addWidget(left_spacer)
         
         lbl_title = QLabel(title)
         lbl_title.setStyleSheet("color: white; font-size: 14pt; font-weight: bold; font-family: 'Malgun Gothic';")
         header_layout.addWidget(lbl_title, alignment=Qt.AlignmentFlag.AlignCenter)
+        
+        btn_close = QPushButton("✕")
+        btn_close.setFixedSize(30, 30)
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.setStyleSheet("""
+            QPushButton {
+                color: white;
+                background: transparent;
+                font-weight: bold;
+                border: none;
+                font-size: 13pt;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.25);
+                border-radius: 15px;
+            }
+        """)
+        btn_close.clicked.connect(self.reject_dialog)
+        header_layout.addWidget(btn_close)
         
         layout.addWidget(header)
         
@@ -700,6 +732,7 @@ class CustomMessageDialog(QDialog):
                     padding: 8px 20px;
                     font-size: 11pt;
                     font-weight: bold;
+                    border: none;
                 }}
                 QPushButton:hover {{ background-color: {styles.DARK_GREEN}; }}
             """)
@@ -715,6 +748,7 @@ class CustomMessageDialog(QDialog):
                     padding: 8px 20px;
                     font-size: 11pt;
                     font-weight: bold;
+                    border: none;
                 }}
                 QPushButton:hover {{ background-color: #9E9E9E; }}
             """)
@@ -736,8 +770,10 @@ class CustomMessageDialog(QDialog):
                     padding: 8px 30px;
                     font-size: 11pt;
                     font-weight: bold;
+                    border: none;
                 }}
-                QPushButton:hover {{ background-color: #E0E0E0; }}
+                QPushButton:hover {{ background-color: {hover_color}; }}
+                QPushButton:pressed {{ background-color: {active_color}; }}
             """)
             btn_ok.clicked.connect(self.accept_dialog)
             
@@ -746,6 +782,14 @@ class CustomMessageDialog(QDialog):
             btn_layout.addStretch()
             
         layout.addLayout(btn_layout)
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
+            self.accept_dialog()
+        elif event.key() == Qt.Key.Key_Escape:
+            self.reject_dialog()
+        else:
+            super().keyPressEvent(event)
 
     def accept_dialog(self):
         self.result_value = True

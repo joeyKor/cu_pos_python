@@ -6,6 +6,7 @@ from PyQt6.QtGui import QColor
 from ui_components import CustomMessageDialog
 
 import styles
+from cash_drawer_manager import CashDrawerManager
 
 try:
     from smartcard.System import readers
@@ -755,6 +756,9 @@ class CashPaymentDialog(QDialog):
         
         self.total_amount = total_amount
         self.received_amount = 0
+        
+        # 금전문함(돈통) 자동 오픈
+        CashDrawerManager.open_drawer_async()
         
         # Main dialog layout (adds 10px margin around container for shadow)
         main_dialog_layout = QVBoxLayout(self)
@@ -3266,6 +3270,9 @@ class PaymentSelectDialog(QDialog):
             
         cash_applied = min(amount, remaining)
         change = max(0, amount - remaining)
+        
+        # 금전문함(돈통) 자동 오픈
+        CashDrawerManager.open_drawer_async()
         
         self.parent().total_paid += cash_applied
         
