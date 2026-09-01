@@ -1,6 +1,6 @@
 # 🏪 DU Retail POS System (Python/PyQt6)
 
-이 프로젝트는 Python과 PyQt6를 활용하여 구현된 대구대학교(DU) 스타일의 스마트 소매점 POS(Point of Sale) 시스템입니다. 직관적인 사용자 인터페이스와 다양한 결제 모듈, 그리고 Firebase Firestore를 통한 클라우드 동기화 및 로컬 백업(Mock DB) 시스템을 지원합니다.
+이 프로젝트는 Python과 PyQt6를 활용하여 구현된 대구대학교(DU) 스타일의 스마트 소매점 POS(Point of Sale) 시스템입니다. 직관적인 사용자 인터페이스와 다양한 결제 모듈, Tmoney 교통카드 스캐너 연동 및 잔액 관리, 금전문함(돈통) 하드웨어 제어, 그리고 Firebase Firestore를 통한 클라우드 동기화 및 로컬 백업(Mock DB) 시스템을 지원합니다.
 
 ---
 
@@ -14,24 +14,35 @@
 
 ### 2. 판매 및 상품 등록 (Sales Screen)
 * **실시간 상품 추가 및 수량 조절**: 바코드 스캔 또는 수동 입력을 통한 실시간 테이블 상품 추가, 수량 변경 및 개별/전체 삭제 기능.
+* **행사 상품 및 할인 자동 계산**: 1+1, 2+1 행사 상품 자동 증정/할인 및 제휴 할인 기능 지원.
+* **보관 쿠폰(키핑)**: 증정품을 매장에서 바로 수령하지 않을 시 키핑 쿠폰 바코드 발급 및 교환 지원.
 * **통합 계산기 페이지**: 판매 화면 내에서 즉시 계산을 도와주는 편리한 보조 계산기 패널을 탑재하였습니다.
 
-### 3. 강력하고 다양한 결제 모듈 (Multi-Payment System)
-* **💳 신용카드 결제**: 가상의 카드 정보(12자리 카드번호 등) 입력을 통해 한도 및 승인 처리를 시뮬레이션합니다.
-* **💵 현금 결제**: 받은 금액 입력 시 거스름돈을 자동으로 계산하며, 현금영수증(소득공제/지출증빙) 발행을 선택하고 처리할 수 있습니다.
-* **📱 모바일 간편결제**: 바코드 또는 QR 코드를 리더기로 스캔하여 간편결제(네이버페이, 카카오페이, 토스페이 등) 승인을 시뮬레이션합니다.
-* **🚌 교통카드 서비스**: 교통카드(T-money 등)의 잔액 조회, 충전 및 결제 기능을 제공합니다.
-* **📝 후불 및 외상 결제**: 외상(후불) 결제 내역을 등록하여 관리할 수 있는 기능을 지원합니다.
-* **💰 거스름돈 적립**: 거스름돈 발생 시 현금 대신 고객 계좌나 포인트로 적립하는 서비스 기능을 탑재하였습니다.
+### 3. 교통카드(Tmoney) 스캐너 연동 & 잔액 관리 시스템
+* **💳 실시간 카드 스캐너(RFID / 바코드) 연동**: 스캐너를 통해 입력되는 카드 UID를 백그라운드에서 실시간으로 감지 및 식별합니다.
+* **🔒 UID 비노출 보안 처리**: 카드 스캔 시 화면에 난수성 UID가 노출되지 않도록 처리하고, 세련된 Tmoney 카드 그래픽으로 시각화합니다.
+* **⚡ 현금 충전**: 카드를 스캔하고 원하는 금액(+1천원, +3천원, +5천원, +1만원 등)을 선택하여 즉시 충전합니다. (엔터키 원터치 충전 지원)
+* **🪙 잔액 환불**: 카드 잔액에서 대행 수수료(500원)를 차감한 후 고객에게 현금 지급하며, 금전문함(돈통)이 자동으로 오픈됩니다.
+* **🔍 잔액 및 거래내역 조회**: 카드 스캔 시 현재 잔액과 함께 충전/결제/환불 상세 이력(일시, 구분, 금액, 잔액)을 표로 제공합니다.
+* **🎯 상시 포커스 유지**: 스캐너 입력이 다른 입력 필드로 유입되지 않도록 카드 스캔 입력창에 항상 포커스를 유지합니다.
 
-### 4. 부가 서비스 (Special Services)
-* **📦 택배 서비스 (Parcel Service)**: 보내는 사람/받는 사람 주소 입력 및 검색, 무게 측정 시뮬레이션, 운송장 출력 등의 풀 프로세스를 탑재한 무인 택배 접수 시스템입니다.
-* **🔄 환불 및 반품 (Refund)**: 이전 영수증 번호를 조회하거나 영수증 목록에서 직접 거래를 선택하여 즉시 환불 및 취소 처리가 가능합니다.
-* **📑 영수증 조회**: 과거에 발행되었던 전체 영수증 내역을 상세 조회할 수 있는 영수증 관리 뷰어를 지원합니다.
+### 4. 강력하고 다양한 결제 모듈 (Multi-Payment System)
+* **💳 신용카드 결제**: 카드 번호 입력 및 IC 칩/MS 결제 시뮬레이션 지원.
+* **💵 현금 결제**: 받은 금액 입력 시 거스름돈 자동 계산 및 금전문함 자동 오픈, 현금영수증 발행 팝업 연동.
+* **🚌 Tmoney(교통카드) 결제**: 티머니 카드를 스캔하여 상품 대금을 즉시 결제하며, 결제 완료 후 **국세청 현금영수증(소득공제/지출증빙) 발행 팝업**이 자동 호출됩니다.
+* **📱 모바일 간편결제 & 상품권**: 네이버페이, 카카오페이, 모바일 교환권/상품권 바코드 결제 처리.
+* **📝 외상/후불 결제**: 후불 거래 내역 관리 및 정산 기능 지원.
+* **💰 거스름돈 적립**: 거스름돈 발생 시 고객 포인트/계좌로 적립하는 서비스.
 
-### 5. 데이터 영속성 및 동기화 (Data Persistence)
+### 5. 하드웨어 및 부가 서비스
+* **🗄️ 금전문함(Cash Drawer) 하드웨어 제어**: 시리얼 포트(COM) 통신을 통해 현금 결제 및 환불 시 자동으로 금전함 오픈 신호 전송.
+* **📦 무인 택배 접수 (Parcel Service)**: 주소 검색, 무게 측정 시뮬레이션, 운송장 출력 풀 프로세스 지원.
+* **🔄 환불 및 반품 (Refund)**: 영수증 번호 조회를 통한 즉시 환불 및 취소 처리.
+* **📑 영수증 관리 & 인쇄**: 영수증 상세 조회 및 HTML/텍스트 영수증 출력 뷰어 지원.
+
+### 6. 데이터 영속성 및 동기화 (Data Persistence)
 * **Firebase Firestore 연동**: 실시간으로 클라우드 데이터베이스에 상품 및 거래 내역을 동기화합니다.
-* **로컬 Mock DB 지원**: `json/firebase_credentials.json` 자격증명 파일이 없거나 오프라인 상태일 경우, 자동으로 `json/firebase_mock_db.json`을 사용하여 로컬에서 완벽하게 작동하는 오프라인 폴백(Fallback) 시스템을 구축했습니다.
+* **로컬 Mock DB 지원**: `json/firebase_credentials.json` 파일이 없거나 오프라인 상태일 경우 자동으로 로컬 JSON 데이터베이스를 사용하는 완벽한 오프라인 폴백(Fallback) 시스템.
 
 ---
 
@@ -40,67 +51,72 @@
 * **Programming Language**: Python 3.13
 * **GUI Framework**: PyQt6 (POS 메인 화면), Tkinter (IC 카드 읽기/쓰기 유틸리티)
 * **Database**: Firebase Firestore (온라인) & Local JSON (오프라인)
-* **Sound Effects**: Pygame Mixer (결제 완료, 경고 등 사운드 알림 지원)
-* **Hardware Integration**: smartcard (`pyscard` 패키지를 이용한 실제 IC 스마트카드 APDU 통신 지원)
+* **Hardware Integration**:
+  - RFID / 바코드 리더기 (HID 키보드 웨지 방식 스캐너)
+  - 시리얼 금전문함 (pySerial 기반 COM 포트 오픈 신호 전송)
+  - smartcard (`pyscard` 패키지를 이용한 IC 스마트카드 APDU 통신)
+* **Sound Effects**: Pygame Mixer / Windows Beep (바코드 인식, 버튼 클릭, 결제 완료 알림음)
 
 ---
 
 ## 📁 프로젝트 구조 (Project Structure)
 
 ```yaml
-cu_mart/
+du_mart/
 │
-├── main.py                     # 애플리케이션 진입점 및 메인 윈도우(컨테이너) 관리
-├── welcome_page.py             # 시작 및 대기 화면 UI와 이벤트 처리
-├── payment_ui.py               # 신용카드, 현금, 간편결제 등 핵심 결제 화면 로직
+├── main.py                     # 애플리케이션 진입점 및 메인 POS 윈도우 관리
+├── welcome_page.py             # 시작 및 대기 화면 UI
+├── payment_ui.py               # 신용카드, 현금, 티머니, 간편결제 등 결제 다이얼로그
+│
+├── transit_card_page.py        # Tmoney 교통카드 충전, 환불, 내역조회 화면
+├── transit_card_manager.py     # Tmoney 데이터베이스 및 잔액/거래내역 관리자
+│
+├── cash_drawer_manager.py      # 금전문함(돈통) 시리얼 포트 하드웨어 연동 관리자
+├── product_manager.py          # 상품 데이터 로드 및 바코드 검색 엔진
+├── receipt_manager.py          # 영수증 포맷팅 및 발행 관리자
+├── transaction_manager.py      # 매출 거래 데이터 통계 및 영속성 처리
+├── firebase_manager.py         # Firebase Firestore 클라우드 연동 및 Mock DB 폴백
 │
 ├── calculator_page.py          # 계산기 보조 도구 화면
 ├── change_accumulation_page.py # 거스름돈 적립 서비스 화면
 ├── check_inquiry_page.py       # 수표 조회 및 현금영수증 발행 확인 화면
-├── parcel_service_page.py      # 주소 검색, 무게 측정, 운송장 출력을 포함한 택배 화면
+├── parcel_service_page.py      # 무인 택배 접수 화면
 ├── post_payment_page.py        # 후불/외상 처리 관리 화면
 ├── product_inquiry_page.py     # 등록된 상품 검색 및 재고 조회 화면
 ├── receipt_inquiry_page.py     # 전체 영수증 조회 및 상세 내역 확인 화면
 ├── refund_page.py              # 영수증 조회를 통한 환불/반품 처리 화면
-├── settings_page.py            # 상품 정보 추가/수정/삭제 관리자 페이지
-├── transit_card_page.py        # 교통카드 충전 및 결제 화면
+├── settings_page.py            # 상품 및 환경설정 관리자 페이지
 │
-├── firebase_manager.py         # Firebase Firestore 연결 및 로컬 Mock DB 폴백 로직
-├── product_manager.py          # 상품 데이터 로드 및 로컬 검색 엔진
-├── receipt_manager.py          # 영수증 데이터 저장 및 로컬 포맷팅 관리
-├── transaction_manager.py      # 거래(매출) 데이터 통계 및 영속성 처리
 ├── styles.py                   # 전역 테마 스타일, 폰트, 색상 토큰 정의
 ├── ui_components.py            # 공통 커스텀 버튼, 다이얼로그 등 공용 위젯
 │
+├── json/                       # 데이터베이스 및 가이드 파일 디렉토리
+│   ├── products.json           # 상품 마스터 데이터
+│   ├── transit_cards.json      # Tmoney 카드 잔액 및 거래내역 데이터
+│   ├── transactions.json       # POS 결제 영수증 데이터
+│   └── settings.json           # 매장 설정 및 금전함 포트 설정
+│
 ├── bank_card_app.py            # [유틸리티] 실제 IC 스마트카드 리더/라이터 (Tkinter)
-├── build_exe.ps1               # PyInstaller 실행 파일 빌드 스크립트
-├── .gitignore                  # Git 버전 관리 제외 설정
-└── README.md                   # 프로젝트 문서 설명서
+├── json_files_guide.txt        # JSON 데이터베이스 가이드 문서
+└── README.md                   # 프로젝트 상세 안내서
 ```
 
 ---
 
 ## 🚀 설치 및 실행 방법 (Installation & Run)
 
-### 1. 요구 사항 설치
-본 프로젝트는 사운드 출력 및 스마트카드 기능 등을 포함하므로 아래 패키지 설치가 필요합니다.
+### 1. 요구 사항 패키지 설치
 ```bash
-pip install PyQt6 firebase-admin pygame pyscard
+pip install PyQt6 firebase-admin pygame pyscard pyserial
 ```
-> **참고**: `pyscard` 패키지는 실제 스마트카드 판독 장비(IC Card Reader)를 사용하는 유틸리티 `bank_card_app.py`를 실행할 때 필요합니다. 만약 스마트카드 하드웨어 모듈을 사용하지 않는다면 제외하셔도 메인 POS 프로그램 실행에는 문제가 없습니다.
 
-### 2. Firebase 자격증명 파일 추가 (선택사항)
-실제 Firebase Firestore 클라우드와 연동하려면 아래 경로에 서비스 계정 키 파일을 생성 및 위치시켜 주세요.
-* 경로: `json/firebase_credentials.json`
-* 파일이 없을 경우 프로그램이 시작될 때 자동으로 **Mock 데이터베이스 모드**(`json/firebase_mock_db.json`)로 작동합니다.
-
-### 3. POS 프로그램 실행
+### 2. POS 프로그램 실행
 ```bash
 python main.py
 ```
 
-### 4. 스마트카드 리더/라이터 앱 실행 (선택사항)
-실제 IC 카드에 계좌 번호 정보를 입력하거나 읽어들일 때는 다음 독립 앱을 실행합니다.
-```bash
-python bank_card_app.py
-```
+### 3. Tmoney 교통카드 기능 사용 가이드
+1. **충전**: 메인 화면에서 **[교통카드] ➔ [교통카드 충전]** 진입 후 스캐너로 카드를 인식하고 충전 금액을 선택합니다.
+2. **환불**: **[교통카드] ➔ [교통카드 환불]** 진입 후 카드를 스캔하면 잔액에서 수수료 500원을 제외한 금액이 정산되며 금전함이 자동으로 열립니다.
+3. **조회**: **[통합조회] ➔ [교통카드잔액조회]** 진입 후 카드를 스캔하여 잔액 및 최근 거래 내역을 확인합니다.
+4. **결제**: 상품 등록 후 **[결제선택] ➔ [교통카드]**를 선택하여 카드를 스캔하면 잔액 차감 결제가 진행되며, 완료 즉시 **현금영수증 발행 팝업**이 나타납니다.

@@ -40,6 +40,7 @@ class WelcomePage(QWidget):
     postPaymentRequested = pyqtSignal()
     productInquiryRequested = pyqtSignal()
     transitCardRequested = pyqtSignal()
+    transitCardInquiryRequested = pyqtSignal()
     checkInquiryRequested = pyqtSignal()
     calculatorRequested = pyqtSignal()
     changeAccumulationRequested = pyqtSignal()
@@ -311,7 +312,7 @@ class WelcomePage(QWidget):
                 elif text == "교통카드":
                     btn.clicked.connect(self.transitCardRequested.emit)
                 elif text == "교통카드잔액조회":
-                    btn.clicked.connect(self.transitCardRequested.emit)
+                    btn.clicked.connect(self.transitCardInquiryRequested.emit)
                 elif text == "수표조회":
                     btn.clicked.connect(self.checkInquiryRequested.emit)
                 elif text == "계산기":

@@ -11,12 +11,13 @@ from ui_components import (ActionButton, StatusLabel, SummaryFrame, EditItemDial
                                CustomMessageDialog, SafeBalanceEditDialog, ReceiptPreviewDialog, StoreRegistrationDialog, PromotionDialog, VoucherExchangeDialog, KeepingLookupDialog, KeepingCouponIssueDialog, PromoAlertWithRelatedDialog, PasswordInputDialog)
 from product_manager import ProductManager
 from settings_page import SettingsPage
-from payment_ui import CreditCardPaymentDialog, CashPaymentDialog, CashReceiptDialog, AffiliateDiscountDialog, PaymentSelectDialog
+from payment_ui import CreditCardPaymentDialog, CashPaymentDialog, CashReceiptDialog, AffiliateDiscountDialog, PaymentSelectDialog, TransitCardPaymentDialog
 from welcome_page import WelcomePage
 from refund_page import RefundPage
 from receipt_inquiry_page import ReceiptInquiryPage
 from check_inquiry_page import CheckInquiryPage
 from transit_card_page import TransitCardPage
+from transit_card_manager import TransitCardManager
 from product_inquiry_page import ProductInquiryPage
 from calculator_page import CalculatorPage
 from change_accumulation_page import ChangeAccumulationPage
@@ -90,6 +91,7 @@ class POSMainWindow(QMainWindow):
         self.product_manager = ProductManager()
         self.transaction_manager = TransactionManager()
         self.receipt_manager = ReceiptManager()
+        self.transit_card_manager = TransitCardManager()
         self.tm = self.transaction_manager
         self.rm = self.receipt_manager
         self.wait_slots = [None, None, None]
@@ -126,6 +128,7 @@ class POSMainWindow(QMainWindow):
         self.welcome_page.barcodeScanned.connect(self.switch_to_sales_and_add)
         self.welcome_page.productInquiryRequested.connect(self.open_product_inquiry_welcome)
         self.welcome_page.transitCardRequested.connect(self.open_transit_card)
+        self.welcome_page.transitCardInquiryRequested.connect(self.open_transit_card_inquiry)
         self.welcome_page.checkInquiryRequested.connect(self.open_check_inquiry)
         self.welcome_page.calculatorRequested.connect(self.open_calculator)
         self.welcome_page.changeAccumulationRequested.connect(self.open_change_accumulation)
@@ -179,7 +182,7 @@ class POSMainWindow(QMainWindow):
         self.central_stack.addWidget(self.check_inquiry_page)
         
         # 7. Transit Card Page
-        self.transit_card_page = TransitCardPage()
+        self.transit_card_page = TransitCardPage(self.transit_card_manager, self.transaction_manager)
         self.transit_card_page.backRequested.connect(self.handle_inquiry_back)
         self.central_stack.addWidget(self.transit_card_page)
         
@@ -263,6 +266,11 @@ class POSMainWindow(QMainWindow):
         self.switch_to_sales_and_add(barcode)
 
     def open_transit_card(self):
+        self.transit_card_page.show_menu()
+        self.switch_page(7)
+
+    def open_transit_card_inquiry(self):
+        self.transit_card_page.show_inquiry()
         self.switch_page(7)
 
     def open_calculator(self):
@@ -1610,6 +1618,48 @@ class POSMainWindow(QMainWindow):
             if self.total_paid >= final_amt:
                 self.finalize_transaction()
 
+    def open_transit_card_payment(self):
+        total_amt, total_disc, final_amt = self.get_cart_summary()
+        m_disc = getattr(self, "membership_discount", 0)
+        v_disc = sum(p["amount"] for p in self.payments if p.get("method") == "MobileVoucher")
+        final_amt -= (m_disc + v_disc)
+        remaining = final_amt - self.total_paid
+        
+        if final_amt <= 0:
+            CustomMessageDialog("결제 불가", "결제할 상품이 없거나 이미 할인으로 처리가 완료되었습니다.", 'warning', self).exec()
+            return
+
+        if remaining <= 0:
+            CustomMessageDialog("알림", "이미 결제가 완료되었습니다.", 'info', self).exec()
+            return
+            
+        dialog = TransitCardPaymentDialog(remaining, self.transit_card_manager, self)
+        if dialog.exec():
+            paid_now = dialog.paid_amount
+            self.total_paid += paid_now
+            
+            # Request Cash Receipt (현금영수증) for Tmoney payment
+            from payment_ui import CashReceiptDialog
+            receipt_dlg = CashReceiptDialog(paid_now, paid_now, self)
+            receipt_id = ""
+            receipt_dlg.exec()
+            if receipt_dlg.receipt_issued:
+                receipt_id = receipt_dlg.receipt_id
+                
+            self.payments.append({
+                "method": "TransitCard",
+                "amount": paid_now,
+                "details": {
+                    "card_id": dialog.card_id,
+                    "card_type": dialog.card_type,
+                    "balance_after": dialog.balance_after,
+                    "receipt_id": receipt_id
+                }
+            })
+            self.update_totals()
+            
+            if self.total_paid >= final_amt:
+                self.finalize_transaction()
 
     def open_cash_payment(self):
         # Calculate remaining total (subtracting mobile voucher discounts from final_amt)

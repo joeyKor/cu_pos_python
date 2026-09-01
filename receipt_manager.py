@@ -257,6 +257,19 @@ class ReceiptManager:
                     <tr><td colspan="3">결제계좌: {account_num}</td></tr>
                     <tr><td colspan="3">거래유형: 회원 번호 결제</td></tr>
                     """
+            elif method == "TransitCard":
+                bal_after = details.get("balance_after", 0)
+                rid = details.get("receipt_id", "")
+                payment_info_html += f"""
+                <tr>
+                    <td class="bold">교통카드 (Tmoney)</td>
+                    <td colspan="2" class="col-amt bold">{amt:,}</td>
+                </tr>
+                <tr><td colspan="3" class="center">********* Tmoney 결제 *********</td></tr>
+                <tr><td colspan="3">카드종류: Tmoney 선불교통카드</td></tr>
+                <tr><td colspan="3">거래 후 잔액: {bal_after:,}원</td></tr>
+                {"<tr><td colspan='3'>현금영수증: " + rid + "</td></tr>" if rid else ""}
+                """
             else: # Cash
                 recv = details.get("received_amt", amt)
                 chg = details.get("change_amt", 0)

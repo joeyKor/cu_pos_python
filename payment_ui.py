@@ -1024,7 +1024,216 @@ class CashPaymentDialog(QDialog):
         self.accept()
 
 
-# (Old duplicate CashReceiptDialog class removed. New customized version is defined at the bottom of the file.)
+class TransitCardPaymentDialog(QDialog):
+    def __init__(self, amount_due, transit_card_manager=None, parent=None):
+        super().__init__(parent)
+        self.amount_due = int(amount_due)
+        if transit_card_manager:
+            self.tm = transit_card_manager
+        else:
+            from transit_card_manager import TransitCardManager
+            self.tm = TransitCardManager()
+            
+        self.paid_amount = 0
+        self.card_id = ""
+        self.card_type = ""
+        self.balance_after = 0
+        self.current_card = None
+        
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(styles.s(500), styles.s(450))
+        
+        self.container = QFrame(self)
+        self.container.setGeometry(styles.s(10), styles.s(10), styles.s(480), styles.s(430))
+        self.container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {styles.WHITE};
+                border-radius: {styles.s(12)}px;
+                border: 2px solid #8A79B6;
+            }}
+        """)
+        
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        shadow.setOffset(0, 5)
+        self.container.setGraphicsEffect(shadow)
+        
+        layout = QVBoxLayout(self.container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Header
+        header = QFrame()
+        header.setStyleSheet("background-color: #8A79B6; border-top-left-radius: 10px; border-top-right-radius: 10px;")
+        header.setFixedHeight(styles.s(50))
+        h_lyt = QHBoxLayout(header)
+        h_lyt.setContentsMargins(styles.s(20), 0, styles.s(20), 0)
+        
+        lbl_h = QLabel("교통카드 결제")
+        lbl_h.setStyleSheet("color: white; font-weight: bold; font-size: 13pt;")
+        
+        btn_x = QPushButton("X")
+        btn_x.setFixedSize(styles.s(28), styles.s(28))
+        btn_x.setStyleSheet("color: white; background: transparent; font-weight: bold; font-size: 12pt; border: none;")
+        btn_x.clicked.connect(self.reject)
+        
+        h_lyt.addWidget(lbl_h)
+        h_lyt.addStretch()
+        h_lyt.addWidget(btn_x)
+        layout.addWidget(header)
+        
+        # Body
+        body = QWidget()
+        b_lyt = QVBoxLayout(body)
+        b_lyt.setContentsMargins(styles.s(25), styles.s(20), styles.s(25), styles.s(20))
+        b_lyt.setSpacing(styles.s(15))
+        
+        # Amount Due
+        due_frame = QFrame()
+        due_frame.setStyleSheet("background-color: #F5F3FF; border: 1px solid #DDD6FE; border-radius: 6px;")
+        d_lyt = QHBoxLayout(due_frame)
+        d_lyt.setContentsMargins(styles.s(15), styles.s(10), styles.s(15), styles.s(10))
+        
+        lbl_d_t = QLabel("결제 요청 금액")
+        lbl_d_t.setStyleSheet("font-size: 12pt; color: #4C1D95; font-weight: bold;")
+        self.lbl_due_amt = QLabel(f"{self.amount_due:,} 원")
+        self.lbl_due_amt.setStyleSheet("font-size: 16pt; color: #6D28D9; font-weight: bold;")
+        d_lyt.addWidget(lbl_d_t)
+        d_lyt.addStretch()
+        d_lyt.addWidget(self.lbl_due_amt)
+        b_lyt.addWidget(due_frame)
+        
+        # Card Scan Input
+        lbl_s_t = QLabel("카드 스캔 (RFID / 리더기 입력):")
+        lbl_s_t.setStyleSheet("font-size: 10pt; color: #374151; font-weight: bold;")
+        b_lyt.addWidget(lbl_s_t)
+        
+        self.txt_scan = QLineEdit()
+        self.txt_scan.setPlaceholderText("스캐너로 카드를 인식하세요")
+        self.txt_scan.setFixedHeight(styles.s(42))
+        self.txt_scan.setStyleSheet("""
+            QLineEdit {
+                background-color: white;
+                color: white;
+                selection-background-color: white;
+                selection-color: white;
+                border: 2px solid #8A79B6;
+                border-radius: 6px;
+                padding-left: 10px;
+                font-size: 12pt;
+            }
+        """)
+        self.txt_scan.returnPressed.connect(self.handle_card_scan)
+        b_lyt.addWidget(self.txt_scan)
+        
+        # Card Info Frame
+        self.card_info_frame = QFrame()
+        self.card_info_frame.setStyleSheet("background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px;")
+        ci_lyt = QVBoxLayout(self.card_info_frame)
+        ci_lyt.setContentsMargins(styles.s(12), styles.s(10), styles.s(12), styles.s(10))
+        ci_lyt.setSpacing(styles.s(6))
+        
+        self.lbl_card_desc = QLabel("카드를 스캐너에 접촉해 주세요")
+        self.lbl_card_desc.setStyleSheet("font-size: 11pt; color: #64748B; font-weight: bold;")
+        self.lbl_card_bal = QLabel("현재 잔액: -- 원")
+        self.lbl_card_bal.setStyleSheet("font-size: 12pt; color: #0284C7; font-weight: bold;")
+        
+        ci_lyt.addWidget(self.lbl_card_desc)
+        ci_lyt.addWidget(self.lbl_card_bal)
+        b_lyt.addWidget(self.card_info_frame)
+        
+        b_lyt.addStretch()
+        
+        # Bottom Buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(styles.s(10))
+        
+        self.btn_pay = QPushButton("결제 승인 [ENTER]")
+        self.btn_pay.setFixedHeight(styles.s(45))
+        self.btn_pay.setStyleSheet("""
+            QPushButton {
+                background-color: #10B981;
+                color: white;
+                font-size: 12pt;
+                font-weight: bold;
+                border-radius: 6px;
+                border: none;
+            }
+            QPushButton:hover { background-color: #059669; }
+            QPushButton:disabled { background-color: #D1D5DB; color: #9CA3AF; }
+        """)
+        self.btn_pay.clicked.connect(self.process_payment)
+        self.btn_pay.setEnabled(False)
+        
+        btn_cancel = QPushButton("취소 [ESC]")
+        btn_cancel.setFixedHeight(styles.s(45))
+        btn_cancel.setFixedWidth(styles.s(100))
+        btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #6B7280;
+                color: white;
+                font-size: 11pt;
+                font-weight: bold;
+                border-radius: 6px;
+                border: none;
+            }
+            QPushButton:hover { background-color: #4B5563; }
+        """)
+        btn_cancel.clicked.connect(self.reject)
+        
+        btn_row.addWidget(self.btn_pay, stretch=1)
+        btn_row.addWidget(btn_cancel)
+        b_lyt.addLayout(btn_row)
+        
+        layout.addWidget(body)
+        
+        QTimer.singleShot(100, self.txt_scan.setFocus)
+
+    def handle_card_scan(self):
+        cid = self.tm.normalize_id(self.txt_scan.text())
+        if not cid:
+            return
+        
+        card = self.tm.get_or_create_card(cid)
+        self.current_card = card
+        self.card_id = cid
+        self.card_type = "Tmoney"
+        bal = int(card.get("balance", 0))
+        
+        self.lbl_card_desc.setText("💳 Tmoney 카드")
+        self.lbl_card_bal.setText(f"현재 잔액: {bal:,} 원")
+        
+        if bal < self.amount_due:
+            self.lbl_card_bal.setStyleSheet("font-size: 12pt; color: #DC2626; font-weight: bold;")
+            self.lbl_card_bal.setText(f"현재 잔액: {bal:,} 원 (⚠️ 잔액 부족: {self.amount_due - bal:,}원 부족)")
+            self.btn_pay.setEnabled(False)
+        else:
+            self.lbl_card_bal.setStyleSheet("font-size: 12pt; color: #059669; font-weight: bold;")
+            self.lbl_card_bal.setText(f"현재 잔액: {bal:,} 원 (결제 후 잔액: {bal - self.amount_due:,} 원)")
+            self.btn_pay.setEnabled(True)
+            self.btn_pay.setFocus()
+
+    def process_payment(self):
+        if not self.current_card:
+            self.handle_card_scan()
+            if not self.current_card:
+                return
+                
+        cid = self.current_card.get("card_id")
+        bal = int(self.current_card.get("balance", 0))
+        if bal < self.amount_due:
+            CustomMessageDialog("잔액 부족", "교통카드 잔액이 부족하여 결제할 수 없습니다.", 'warning', self).exec()
+            return
+            
+        success, new_bal, msg, tx = self.tm.pay_with_card(cid, self.amount_due, memo="POS 상품 결제")
+        if success:
+            self.paid_amount = self.amount_due
+            self.balance_after = new_bal
+            self.accept()
+        else:
+            CustomMessageDialog("결제 오류", msg, 'warning', self).exec()
 
 
 class TransitCardDialog(QDialog):
@@ -3109,7 +3318,7 @@ class PaymentSelectDialog(QDialog):
             return btn
 
         btn_credit_card = create_pay_btn("신용카드", self.trigger_card, is_main=True)
-        btn_transit_card = create_pay_btn("교통카드", lambda: self.trigger_simulated("교통카드"))
+        btn_transit_card = create_pay_btn("교통카드", self.trigger_transit_card)
         btn_mobile = create_pay_btn("모바일", self.trigger_mobile)
         btn_gift = create_pay_btn("상품권", lambda: self.trigger_simulated("상품권"))
         btn_school = create_pay_btn("급식카드/\n청소년바우처", lambda: self.trigger_simulated("급식카드/청소년바우처"))
@@ -3119,7 +3328,6 @@ class PaymentSelectDialog(QDialog):
         btn_bank = create_pay_btn("계좌이체", lambda: self.trigger_simulated("계좌이체"))
         
         # Disable unsupported buttons
-        btn_transit_card.setEnabled(False)
         btn_gift.setEnabled(False)
         btn_school.setEnabled(False)
         btn_ic_card.setEnabled(False)
@@ -3242,6 +3450,11 @@ class PaymentSelectDialog(QDialog):
         
     def trigger_card(self):
         self.parent().open_card_payment()
+        self.update_amounts()
+        self.check_completion()
+
+    def trigger_transit_card(self):
+        self.parent().open_transit_card_payment()
         self.update_amounts()
         self.check_completion()
         
