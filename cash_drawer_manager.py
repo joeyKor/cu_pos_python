@@ -263,13 +263,16 @@ class CashDrawerManager:
             return False, f"프린터 출력 오류: {e}"
 
     @classmethod
-    def open_drawer_async(cls, callback=None):
+    def open_drawer_async(cls, callback=None, force=False):
         """백그라운드 데몬 스레드로 UI 지연 없이 금전문함 열기 실행"""
         def _worker():
             instance = cls()
-            if not instance.config.get("auto_open", True):
+            if not force and not instance.config.get("auto_open", True):
                 return
             success, msg = instance.open_drawer()
+            if not success:
+                # 하드웨어 미연결 또는 가상 환경에서도 열림 피드백을 위해 사운드 출력
+                instance.play_sound()
             if callback:
                 try:
                     callback(success, msg)

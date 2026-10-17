@@ -3,8 +3,9 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                              QHBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, 
                              QLabel, QLineEdit, QGridLayout, QFrame, QAbstractItemView, 
                              QPushButton, QStackedWidget, QInputDialog, QSizePolicy)
-from PyQt6.QtCore import Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QUrl
 from PyQt6.QtGui import QColor, QPixmap
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 import styles
 from ui_components import (ActionButton, StatusLabel, SummaryFrame, EditItemDialog, 
@@ -26,6 +27,14 @@ from transaction_manager import TransactionManager
 from receipt_manager import ReceiptManager
 from post_payment_page import PostPaymentPage, PostPaymentOptionDialog
 from cash_drawer_manager import CashDrawerManager
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(os.path.dirname(__file__))
+    return os.path.join(base_path, relative_path)
 
 # Globally monkey-patch QPushButton to play an asynchronous beep sound on click
 import threading
@@ -137,6 +146,7 @@ class POSMainWindow(QMainWindow):
         self.welcome_page.systemSettingsRequested.connect(self.open_system_settings)
         self.welcome_page.safeBalanceEditRequested.connect(self.handle_safe_balance_edit)
         self.welcome_page.storeRegistrationRequested.connect(self.handle_store_registration)
+        self.welcome_page.cashDrawerRequested.connect(self.handle_open_cash_drawer)
         self.welcome_page.lastReceiptPrintRequested.connect(self.handle_welcome_receipt_print)
         self.welcome_page.refundRequested.connect(lambda: self.switch_page(2))
         self.welcome_page.receiptInquiryRequested.connect(lambda: self.switch_page(3))
@@ -211,6 +221,12 @@ class POSMainWindow(QMainWindow):
         # Start at Welcome Page
         self.central_stack.setCurrentIndex(0)
         self.page_history = [0]
+
+        # Audio Player for Welcome greeting ("안녕하세요. 디유편의점입니다")
+        self.init_welcome_audio()
+        self.init_promo_audio()
+        self.central_stack.currentChanged.connect(self.handle_page_changed)
+        QTimer.singleShot(200, self.play_welcome_sound)
 
     def setup_sales_ui(self):
         main_layout = QVBoxLayout(self.sales_widget)
@@ -300,13 +316,87 @@ class POSMainWindow(QMainWindow):
     def open_check_inquiry(self):
         self.switch_page(6)
 
+    def init_welcome_audio(self):
+        try:
+            self.welcome_player = QMediaPlayer(self)
+            self.welcome_audio_output = QAudioOutput(self)
+            self.welcome_player.setAudioOutput(self.welcome_audio_output)
+            self.welcome_audio_output.setVolume(1.0)
+            
+            audio_path = resource_path(os.path.join("assets", "audio", "001.mp3"))
+            if os.path.exists(audio_path):
+                self.welcome_player.setSource(QUrl.fromLocalFile(audio_path))
+            else:
+                print(f"[Warning] Welcome audio file not found: {audio_path}")
+        except Exception as e:
+            print(f"[Error] Failed to initialize welcome audio: {e}")
+            self.welcome_player = None
+
+    def play_welcome_sound(self):
+        if hasattr(self, 'welcome_player') and self.welcome_player is not None:
+            try:
+                self.welcome_player.stop()
+                self.welcome_player.setPosition(0)
+                self.welcome_player.play()
+            except Exception as e:
+                print(f"[Warning] Failed to play welcome sound: {e}")
+
+    def stop_welcome_sound(self):
+        if hasattr(self, 'welcome_player') and self.welcome_player is not None:
+            try:
+                self.welcome_player.stop()
+            except Exception:
+                pass
+
+    def handle_page_changed(self, index):
+        if index == 0:
+            self.play_welcome_sound()
+        else:
+            self.stop_welcome_sound()
+
+    def init_promo_audio(self):
+        try:
+            self.promo_player = QMediaPlayer(self)
+            self.promo_audio_output = QAudioOutput(self)
+            self.promo_player.setAudioOutput(self.promo_audio_output)
+            self.promo_audio_output.setVolume(1.0)
+        except Exception as e:
+            print(f"[Error] Failed to initialize promo audio: {e}")
+            self.promo_player = None
+
+    def play_promo_sound(self, promo_type):
+        if hasattr(self, 'promo_player') and self.promo_player is not None:
+            try:
+                audio_file = None
+                if promo_type == 1:
+                    audio_file = "003.mp3"
+                elif promo_type == 2:
+                    audio_dir = resource_path(os.path.join("assets", "audio"))
+                    if os.path.exists(audio_dir):
+                        for f in os.listdir(audio_dir):
+                            if ("투플러스원" in f or "2+1" in f) and f.endswith(".mp3"):
+                                audio_file = f
+                                break
+                if audio_file:
+                    audio_path = resource_path(os.path.join("assets", "audio", audio_file))
+                    if os.path.exists(audio_path):
+                        self.promo_player.stop()
+                        self.promo_player.setSource(QUrl.fromLocalFile(audio_path))
+                        self.promo_player.setPosition(0)
+                        self.promo_player.play()
+            except Exception as e:
+                print(f"[Warning] Failed to play promo sound: {e}")
+
     def go_to_home(self):
         self.clear_cart()
         self.reset_wait_state()
         self.update_welcome_history()
         # Return to Welcome Page
+        prev_index = self.central_stack.currentIndex()
         self.central_stack.setCurrentIndex(0)
         self.page_history = [0]
+        if prev_index == 0:
+            self.play_welcome_sound()
 
     def reset_wait_state(self):
         self.current_wait_index = -1
@@ -327,7 +417,10 @@ class POSMainWindow(QMainWindow):
 
     def switch_page(self, index):
         self.page_history.append(index)
+        prev_index = self.central_stack.currentIndex()
         self.central_stack.setCurrentIndex(index)
+        if index == 0 and prev_index == 0:
+            self.play_welcome_sound()
         if index == 0 and hasattr(self, 'welcome_page'):
             self.welcome_page.refresh_quick_items()
         elif index == 4 and hasattr(self, 'settings_page'):
@@ -1311,12 +1404,16 @@ class POSMainWindow(QMainWindow):
         # Promotion Alert (On-screen inline highlight)
         promo_type = product.get("promo_type", 0)
         if promo_type in [1, 2]:
-            promo_name = "1+1" if promo_type == 1 else "2+1"
+            if promo_type == 1:
+                promo_text = "★ 원플러스원 상품입니다. ★"
+                color = "#D32F2F"
+            else:
+                promo_text = "★ 투플러스원 상품입니다. ★"
+                color = "#F59E0B"
             
-            # Highlight color (Red for 1+1, Orange for 2+1)
-            color = "#D32F2F" if promo_type == 1 else "#F59E0B"
             self.lbl_promo_info.setStyleSheet(f"font-size: {styles.fs(22)}; font-weight: bold; color: {color}; margin-bottom: 5px;")
-            self.lbl_promo_info.setText(f"★ {promo_name} 행사 상품입니다! ★")
+            self.lbl_promo_info.setText(promo_text)
+            self.play_promo_sound(promo_type)
             
             # Load and display product image
             img_path = None
@@ -1931,6 +2028,9 @@ class POSMainWindow(QMainWindow):
             self.receipt_manager.save_store_info()
             CustomMessageDialog("저장 완료", "점포 정보가 성공적으로 저장되었습니다.", 'info', self).exec()
 
+    def handle_open_cash_drawer(self):
+        CashDrawerManager.open_drawer_async(force=True)
+
     def handle_welcome_receipt_print(self):
         last_tx = self.transaction_manager.get_last_transaction()
         if not last_tx:
@@ -1942,16 +2042,15 @@ class POSMainWindow(QMainWindow):
 
     def open_settings(self):
         self.switch_page(4)
+        self.settings_page.set_mode("products")
         # Refresh lists when entering
         self.settings_page.load_data()
-        self.settings_page.tab_widget.setCurrentIndex(0)
 
     def open_system_settings(self):
         dialog = PasswordInputDialog(self)
         if dialog.exec():
             self.switch_page(4)
-            self.settings_page.load_data()
-            self.settings_page.tab_widget.setCurrentIndex(2)
+            self.settings_page.set_mode("system")
 
     def handle_settings_back(self):
         self.handle_inquiry_back() # Reuse same history logic
@@ -1988,14 +2087,8 @@ class POSMainWindow(QMainWindow):
         method_map = {"Card": "카드", "Cash": "현금", "MobilePay": "모바일페이"}
         pay_method_ko = method_map.get(pay_method, pay_method)
         
-        confirm_msg = (
-            f"선택된 영수증 정보:\n"
-            f"· 품목: {items_desc}\n"
-            f"· 금액: {total_amt:,}원 ({pay_method_ko})\n\n"
-            f"정말 환불 처리를 진행하시겠습니까?"
-        )
-        
-        confirm_dlg = CustomMessageDialog("영수증 환불 확인", confirm_msg, 'question', self)
+        from ui_components import ReceiptRefundConfirmDialog, ReceiptRefundSuccessDialog
+        confirm_dlg = ReceiptRefundConfirmDialog(tx, barcode, self)
         confirm_dlg.exec()
         
         if confirm_dlg.result_value:
@@ -2018,14 +2111,7 @@ class POSMainWindow(QMainWindow):
             success, message = dialog.get_result()
             if success:
                 self.update_welcome_history()
-                CustomMessageDialog(
-                    "환불 완료", 
-                    f"영수증 환불 처리가 성공적으로 완료되었습니다.\n\n"
-                    f"· 환불 금액: {total_amt:,}원\n"
-                    f"· 결제 수단: {pay_method_ko} 반환 완료", 
-                    'info', 
-                    self
-                ).exec()
+                ReceiptRefundSuccessDialog(total_amt, pay_method_ko, self).exec()
             else:
                 CustomMessageDialog(
                     "환불 실패", 

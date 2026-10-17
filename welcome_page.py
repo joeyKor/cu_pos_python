@@ -33,6 +33,7 @@ class WelcomePage(QWidget):
     systemSettingsRequested = pyqtSignal()
     safeBalanceEditRequested = pyqtSignal()
     storeRegistrationRequested = pyqtSignal()
+    cashDrawerRequested = pyqtSignal()
     lastReceiptPrintRequested = pyqtSignal()
     refundRequested = pyqtSignal()
     receiptInquiryRequested = pyqtSignal()
@@ -100,7 +101,7 @@ class WelcomePage(QWidget):
         self.top_btn_container = top_btn_container
 
         # Greeting Text
-        greeting_label = QLabel("어서오세요. DU입니다.")
+        greeting_label = QLabel("안녕하세요. DU편의점입니다.")
         greeting_label.setStyleSheet(f"font-size: {styles.fs(34)}; font-weight: bold; color: #2C3E50; background: transparent;")
         header_layout.addWidget(greeting_label, alignment=Qt.AlignmentFlag.AlignHCenter)
         header_layout.addSpacing(styles.s(10))
@@ -462,14 +463,31 @@ class WelcomePage(QWidget):
         btn_l_arr.setStyleSheet("background: white; border: none;")
         cat_row.addWidget(btn_l_arr)
         
-        cats = [("일반상품", "#7AB800"), ("소분상품", "#6C757D"), ("신문/상품권", "#6C757D"), ("쓰레기봉투/화장", "#6C757D"), ("점포등록", "#6C757D"), ("상품관리", "#6C757D"), ("설정", "#5C6BC0")]
+        cats = [("일반상품", "#7AB800"), ("소분상품", "#6C757D"), ("신문/상품권", "#6C757D"), ("금전함 열기", "#6C757D"), ("점포등록", "#6C757D"), ("상품관리", "#6C757D"), ("설정", "#5C6BC0")]
         for n, c in cats:
-            display_text = n if n in ["점포등록", "상품관리", "설정"] else ""
+            display_text = n if n in ["금전함 열기", "점포등록", "상품관리", "설정"] else ""
             b = QPushButton(display_text)
             b.setFixedHeight(styles.s(50))
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setStyleSheet(f"background: white; color: #333; font-weight: bold; border: none; border-top: {styles.s(4)}px solid {c};")
-            if n == "상품관리":
+            if display_text:
+                b.setCursor(Qt.CursorShape.PointingHandCursor)
+                b.setStyleSheet(f"""
+                    QPushButton {{
+                        background: white;
+                        color: #333;
+                        font-weight: bold;
+                        border: none;
+                        border-top: {styles.s(4)}px solid {c};
+                    }}
+                    QPushButton:hover {{
+                        background-color: #F1F3F5;
+                    }}
+                """)
+            else:
+                b.setStyleSheet(f"background: white; color: #333; font-weight: bold; border: none; border-top: {styles.s(4)}px solid {c};")
+
+            if n == "금전함 열기":
+                b.clicked.connect(self.cashDrawerRequested.emit)
+            elif n == "상품관리":
                 b.clicked.connect(self.settingsRequested.emit)
             elif n == "점포등록":
                 b.clicked.connect(self.storeRegistrationRequested.emit)

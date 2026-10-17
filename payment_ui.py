@@ -1,12 +1,22 @@
+import os, sys
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QFrame, QWidget, QLineEdit, QGridLayout,
                              QGraphicsDropShadowEffect, QButtonGroup)
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import QColor
+from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 from ui_components import CustomMessageDialog
 
 import styles
 from cash_drawer_manager import CashDrawerManager
+
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(os.path.dirname(__file__))
+    return os.path.join(base_path, relative_path)
 
 try:
     from smartcard.System import readers
@@ -1792,6 +1802,9 @@ class CashReceiptDialog(QDialog):
         self.receipt_issued = False
         self.receipt_id = ""
         
+        # Audio Player for "현금영수증 필요하세요?" (002.mp3)
+        self.init_audio()
+
         # Main Container
         self.container = QFrame(self)
         self.container.setGeometry(styles.s(10), styles.s(10), styles.s(660), styles.s(500))
@@ -2206,12 +2219,42 @@ class CashReceiptDialog(QDialog):
         self.txt_identifier.setText(formatted)
         self.txt_identifier.blockSignals(False)
 
+    def init_audio(self):
+        try:
+            self.player = QMediaPlayer(self)
+            self.audio_output = QAudioOutput(self)
+            self.player.setAudioOutput(self.audio_output)
+            self.audio_output.setVolume(1.0)
+            
+            audio_path = resource_path(os.path.join("assets", "audio", "002.mp3"))
+            if os.path.exists(audio_path):
+                self.player.setSource(QUrl.fromLocalFile(audio_path))
+                QTimer.singleShot(150, self.play_audio)
+            else:
+                print(f"[Warning] Cash receipt audio not found: {audio_path}")
+        except Exception as e:
+            print(f"[Error] Failed to initialize cash receipt audio: {e}")
+            self.player = None
+
+    def play_audio(self):
+        if hasattr(self, 'player') and self.player is not None:
+            try:
+                self.player.stop()
+                self.player.setPosition(0)
+                self.player.play()
+            except Exception as e:
+                print(f"[Warning] Failed to play cash receipt audio: {e}")
+
     def stop_audio(self):
         if hasattr(self, 'player') and self.player is not None:
             try:
                 self.player.stop()
             except Exception:
                 pass
+
+    def closeEvent(self, event):
+        self.stop_audio()
+        super().closeEvent(event)
 
     def reject(self):
         self.stop_audio()

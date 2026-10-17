@@ -615,165 +615,310 @@ class PromoAlertWithRelatedDialog(QDialog):
 
 class CustomMessageDialog(QDialog):
     """
-    A beautiful custom dialog to replace QMessageBox.
-    types: 'info', 'warning', 'question'
+    A modern, sleek POS custom dialog replacing QMessageBox.
+    types: 'info', 'warning', 'question' (auto-detects error/success themes)
     """
     def __init__(self, title, message, type='info', parent=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(500, 320)
+        
+        # Determine theme variant
+        theme = type.lower() if type else 'info'
+        is_error = theme == 'error' or any(k in title for k in ['오류', '실패'])
+        is_success = any(k in title for k in ['성공', '완료'])
+        is_warning = theme == 'warning' or any(k in title for k in ['주의', '불가', '경고'])
+        
+        if is_error:
+            badge_text = "⛔ 오류" if '오류' in title else "✕ 실패"
+            badge_bg = "rgba(239, 68, 68, 0.22)"
+            badge_border = "#EF4444"
+            badge_color = "#FCA5A5"
+            icon_char = "!"
+            icon_bg = "#FEF2F2"
+            icon_border = "#EF4444"
+            icon_color = "#DC2626"
+            btn_primary_bg = "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #EF4444, stop:1 #DC2626)"
+            btn_primary_hover = "#B91C1C"
+            btn_primary_pressed = "#991B1B"
+        elif is_success:
+            badge_text = "✔ 완료" if '완료' in title else "✔ 성공"
+            badge_bg = "rgba(16, 185, 129, 0.22)"
+            badge_border = "#10B981"
+            badge_color = "#86EFAC"
+            icon_char = "✓"
+            icon_bg = "#F0FDF4"
+            icon_border = "#22C55E"
+            icon_color = "#16A34A"
+            btn_primary_bg = "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #10B981, stop:1 #059669)"
+            btn_primary_hover = "#047857"
+            btn_primary_pressed = "#064E3B"
+        elif is_warning:
+            badge_text = "⚠️ 불가" if '불가' in title else ("⚠️ 주의" if '주의' in title else "⚠️ 알림")
+            badge_bg = "rgba(245, 158, 11, 0.25)"
+            badge_border = "#F59E0B"
+            badge_color = "#FDE68A"
+            icon_char = "!"
+            icon_bg = "#FFFBEB"
+            icon_border = "#F59E0B"
+            icon_color = "#D97706"
+            btn_primary_bg = "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #F59E0B, stop:1 #D97706)"
+            btn_primary_hover = "#B45309"
+            btn_primary_pressed = "#92400E"
+        elif theme == 'question':
+            badge_text = "❓ 확인"
+            badge_bg = "rgba(59, 130, 246, 0.22)"
+            badge_border = "#3B82F6"
+            badge_color = "#93C5FD"
+            icon_char = "?"
+            icon_bg = "#EFF6FF"
+            icon_border = "#3B82F6"
+            icon_color = "#2563EB"
+            btn_primary_bg = "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #3B82F6, stop:1 #2563EB)"
+            btn_primary_hover = "#1D4ED8"
+            btn_primary_pressed = "#1E40AF"
+        else: # Default info
+            badge_text = "ℹ️ 안내"
+            badge_bg = "rgba(99, 102, 241, 0.22)"
+            badge_border = "#6366F1"
+            badge_color = "#C7D2FE"
+            icon_char = "ℹ"
+            icon_bg = "#EEF2FF"
+            icon_border = "#6366F1"
+            icon_color = "#4F46E5"
+            btn_primary_bg = "qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #6366F1, stop:1 #4F46E5)"
+            btn_primary_hover = "#4338CA"
+            btn_primary_pressed = "#3730A3"
+            
+        dlg_w = styles.s(540)
+        dlg_h = styles.s(310)
+        self.setFixedSize(dlg_w, dlg_h)
         
         self.result_value = False
         self.init_time = time.time()
         
-        # Main Container with rounding and shadow
+        # Main Container
         self.container = QFrame(self)
-        self.container.setGeometry(10, 10, 480, 300)
+        self.container.setObjectName("dialogContainer")
+        self.container.setGeometry(styles.s(10), styles.s(10), dlg_w - styles.s(20), dlg_h - styles.s(20))
         self.container.setStyleSheet(f"""
-            QFrame {{
-                background-color: {styles.WHITE};
-                border-radius: 15px;
-                border: 1px solid {styles.BORDER_COLOR};
+            QFrame#dialogContainer {{
+                background-color: #FFFFFF;
+                border-radius: {styles.s(16)}px;
+                border: 1px solid #CBD5E1;
             }}
         """)
         
-        # Shadow effect
-        shadow = QGraphicsDropShadowEffect()
-        shadow.setBlurRadius(20)
-        shadow.setColor(QColor(0, 0, 0, 80))
-        shadow.setOffset(0, 5)
+        # Drop shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(styles.s(24))
+        shadow.setColor(QColor(15, 23, 42, 70))
+        shadow.setOffset(0, styles.s(6))
         self.container.setGraphicsEffect(shadow)
         
-        layout = QVBoxLayout(self.container)
-        layout.setContentsMargins(0, 0, 0, 20)
+        main_vbox = QVBoxLayout(self.container)
+        main_vbox.setContentsMargins(0, 0, 0, styles.s(18))
+        main_vbox.setSpacing(0)
         
-        # Header (Color coded by type)
-        header_color = styles.PRIMARY_PURPLE
-        hover_color = "#6D28D9"
-        active_color = "#5B21B6"
-        if type == 'warning':
-            header_color = "#FFA726" # Orange
-            hover_color = "#FB8C00"
-            active_color = "#F57C00"
-        elif type == 'question':
-            header_color = styles.ACCENT_GREEN
-            hover_color = styles.DARK_GREEN
-            active_color = "#1E3B33"
-            
+        # 1. Header Bar
         header = QFrame()
+        header.setObjectName("dialogHeader")
         header.setStyleSheet(f"""
-            background-color: {header_color};
-            border-top-left-radius: 15px;
-            border-top-right-radius: 15px;
+            QFrame#dialogHeader {{
+                background-color: #1E293B;
+                border-top-left-radius: {styles.s(16)}px;
+                border-top-right-radius: {styles.s(16)}px;
+                border-bottom: 1px solid #0F172A;
+            }}
         """)
-        header.setFixedHeight(50)
+        header.setFixedHeight(styles.s(52))
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(15, 0, 15, 0)
+        header_layout.setContentsMargins(styles.s(18), 0, styles.s(14), 0)
+        header_layout.setSpacing(styles.s(10))
         
-        # Spacer on left to balance close button
-        left_spacer = QWidget()
-        left_spacer.setFixedSize(30, 30)
-        left_spacer.setStyleSheet("background: transparent; border: none;")
-        header_layout.addWidget(left_spacer)
+        # Category Badge
+        lbl_badge = QLabel(badge_text)
+        lbl_badge.setStyleSheet(f"""
+            QLabel {{
+                background-color: {badge_bg};
+                border: 1px solid {badge_border};
+                color: {badge_color};
+                font-size: {styles.fs(10)};
+                font-weight: bold;
+                border-radius: {styles.s(12)}px;
+                padding: {styles.s(3)}px {styles.s(10)}px;
+                font-family: '{styles.FONT_FAMILY}';
+            }}
+        """)
+        header_layout.addWidget(lbl_badge, alignment=Qt.AlignmentFlag.AlignVCenter)
         
+        # Title
         lbl_title = QLabel(title)
-        lbl_title.setStyleSheet("color: white; font-size: 14pt; font-weight: bold; font-family: 'Malgun Gothic';")
-        header_layout.addWidget(lbl_title, alignment=Qt.AlignmentFlag.AlignCenter)
-        
-        btn_close = QPushButton("✕")
-        btn_close.setFixedSize(30, 30)
-        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_close.setStyleSheet("""
-            QPushButton {
-                color: white;
-                background: transparent;
+        lbl_title.setStyleSheet(f"""
+            QLabel {{
+                color: #FFFFFF;
+                font-size: {styles.fs(14)};
                 font-weight: bold;
                 border: none;
-                font-size: 13pt;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.25);
-                border-radius: 15px;
-            }
+                background: transparent;
+                font-family: '{styles.FONT_FAMILY}';
+            }}
+        """)
+        header_layout.addWidget(lbl_title, alignment=Qt.AlignmentFlag.AlignVCenter)
+        header_layout.addStretch()
+        
+        # Close Button
+        btn_close = QPushButton("✕")
+        btn_close.setFixedSize(styles.s(32), styles.s(32))
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.setStyleSheet(f"""
+            QPushButton {{
+                color: #94A3B8;
+                background-color: rgba(255, 255, 255, 0.08);
+                border-radius: {styles.s(16)}px;
+                font-weight: bold;
+                border: none;
+                font-size: {styles.fs(12)};
+            }}
+            QPushButton:hover {{
+                background-color: #EF4444;
+                color: #FFFFFF;
+            }}
         """)
         btn_close.clicked.connect(self.reject_dialog)
-        header_layout.addWidget(btn_close)
+        header_layout.addWidget(btn_close, alignment=Qt.AlignmentFlag.AlignVCenter)
         
-        layout.addWidget(header)
+        main_vbox.addWidget(header)
         
-        # Message Body
-        msg_frame = QFrame()
-        msg_frame.setStyleSheet("background-color: transparent; border: none;") # Transparent inside container
-        msg_layout = QVBoxLayout(msg_frame)
-        msg_layout.setContentsMargins(20, 20, 20, 20)
+        # 2. Content Card
+        content_card = QFrame()
+        content_card.setObjectName("contentCard")
+        content_card.setStyleSheet(f"""
+            QFrame#contentCard {{
+                background-color: #F8FAFC;
+                border: 1px solid #E2E8F0;
+                border-radius: {styles.s(12)}px;
+            }}
+        """)
+        content_layout = QHBoxLayout(content_card)
+        content_layout.setContentsMargins(styles.s(18), styles.s(16), styles.s(18), styles.s(16))
+        content_layout.setSpacing(styles.s(16))
         
+        # Icon circle
+        lbl_icon = QLabel(icon_char)
+        lbl_icon.setFixedSize(styles.s(52), styles.s(52))
+        lbl_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_icon.setStyleSheet(f"""
+            QLabel {{
+                background: {icon_bg};
+                border: 2px solid {icon_border};
+                border-radius: {styles.s(26)}px;
+                color: {icon_color};
+                font-size: {styles.fs(22)};
+                font-weight: 900;
+                font-family: 'Segoe UI', Arial, sans-serif;
+            }}
+        """)
+        content_layout.addWidget(lbl_icon, alignment=Qt.AlignmentFlag.AlignCenter)
+        
+        # Message text
         lbl_msg = QLabel(message)
         lbl_msg.setWordWrap(True)
-        lbl_msg.setStyleSheet(f"color: {styles.TEXT_COLOR}; font-size: 12pt; font-family: 'Malgun Gothic';")
-        lbl_msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_msg.setStyleSheet(f"""
+            QLabel {{
+                color: #1E293B;
+                font-size: {styles.fs(12)};
+                font-weight: 600;
+                line-height: 1.4;
+                border: none;
+                background: transparent;
+                font-family: '{styles.FONT_FAMILY}';
+            }}
+        """)
+        lbl_msg.setAlignment(Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
+        content_layout.addWidget(lbl_msg, 1)
         
-        msg_layout.addWidget(lbl_msg)
-        layout.addWidget(msg_frame)
+        # Outer padding for content_card
+        card_container = QWidget()
+        card_vbox = QVBoxLayout(card_container)
+        card_vbox.setContentsMargins(styles.s(18), styles.s(14), styles.s(18), styles.s(12))
+        card_vbox.addWidget(content_card)
         
-        # Buttons
+        main_vbox.addWidget(card_container, 1)
+        
+        # 3. Action Buttons
         btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(15)
-        btn_layout.setContentsMargins(20, 0, 20, 0)
+        btn_layout.setContentsMargins(styles.s(18), 0, styles.s(18), 0)
+        btn_layout.setSpacing(styles.s(12))
         
-        if type == 'question':
-            btn_yes = QPushButton("예 (Yes)")
-            btn_yes.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_yes.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {styles.ACCENT_GREEN};
-                    color: white;
-                    border-radius: 8px;
-                    padding: 8px 20px;
-                    font-size: 11pt;
-                    font-weight: bold;
-                    border: none;
-                }}
-                QPushButton:hover {{ background-color: {styles.DARK_GREEN}; }}
-            """)
-            btn_yes.clicked.connect(self.accept_dialog)
-            
+        if theme == 'question':
             btn_no = QPushButton("아니오 (No)")
+            btn_no.setFixedHeight(styles.s(44))
+            btn_no.setMinimumWidth(styles.s(140))
             btn_no.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_no.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: #BDBDBD;
-                    color: white;
-                    border-radius: 8px;
-                    padding: 8px 20px;
-                    font-size: 11pt;
+                    background-color: #F1F5F9;
+                    color: #475569;
+                    border: 1px solid #CBD5E1;
+                    border-radius: {styles.s(10)}px;
+                    padding: 0 {styles.s(20)}px;
+                    font-size: {styles.fs(12)};
                     font-weight: bold;
-                    border: none;
+                    font-family: '{styles.FONT_FAMILY}';
                 }}
-                QPushButton:hover {{ background-color: #9E9E9E; }}
+                QPushButton:hover {{
+                    background-color: #E2E8F0;
+                    color: #1E293B;
+                }}
+                QPushButton:pressed {{
+                    background-color: #CBD5E1;
+                }}
             """)
             btn_no.clicked.connect(self.reject_dialog)
             
-            btn_layout.addStretch()
-            btn_layout.addWidget(btn_yes)
-            btn_layout.addWidget(btn_no)
-            btn_layout.addStretch()
+            btn_yes = QPushButton("예 (Yes)")
+            btn_yes.setFixedHeight(styles.s(44))
+            btn_yes.setMinimumWidth(styles.s(140))
+            btn_yes.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn_yes.setStyleSheet(f"""
+                QPushButton {{
+                    background: {btn_primary_bg};
+                    color: #FFFFFF;
+                    border: none;
+                    border-radius: {styles.s(10)}px;
+                    padding: 0 {styles.s(20)}px;
+                    font-size: {styles.fs(12)};
+                    font-weight: bold;
+                    font-family: '{styles.FONT_FAMILY}';
+                }}
+                QPushButton:hover {{ background: {btn_primary_hover}; }}
+                QPushButton:pressed {{ background: {btn_primary_pressed}; }}
+            """)
+            btn_yes.clicked.connect(self.accept_dialog)
             
-        else: # Info or Warning
+            btn_layout.addStretch()
+            btn_layout.addWidget(btn_no)
+            btn_layout.addWidget(btn_yes)
+            btn_layout.addStretch()
+        else:
             btn_ok = QPushButton("확인 (OK)")
+            btn_ok.setFixedHeight(styles.s(44))
+            btn_ok.setMinimumWidth(styles.s(180))
             btn_ok.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_ok.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {header_color};
-                    color: white;
-                    border-radius: 8px;
-                    padding: 8px 30px;
-                    font-size: 11pt;
-                    font-weight: bold;
+                    background: {btn_primary_bg};
+                    color: #FFFFFF;
                     border: none;
+                    border-radius: {styles.s(10)}px;
+                    padding: 0 {styles.s(32)}px;
+                    font-size: {styles.fs(12)};
+                    font-weight: bold;
+                    font-family: '{styles.FONT_FAMILY}';
                 }}
-                QPushButton:hover {{ background-color: {hover_color}; }}
-                QPushButton:pressed {{ background-color: {active_color}; }}
+                QPushButton:hover {{ background: {btn_primary_hover}; }}
+                QPushButton:pressed {{ background: {btn_primary_pressed}; }}
             """)
             btn_ok.clicked.connect(self.accept_dialog)
             
@@ -781,7 +926,7 @@ class CustomMessageDialog(QDialog):
             btn_layout.addWidget(btn_ok)
             btn_layout.addStretch()
             
-        layout.addLayout(btn_layout)
+        main_vbox.addLayout(btn_layout)
 
     def keyPressEvent(self, event):
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Space):
@@ -828,13 +973,13 @@ class PasswordInputDialog(QDialog):
         layout.setSpacing(15)
         
         # Title
-        self.lbl_title = QLabel("비밀번호 확인")
+        self.lbl_title = QLabel("관리자 비밀번호 확인")
         self.lbl_title.setStyleSheet(f"color: {styles.PRIMARY_PURPLE}; font-size: 16pt; font-weight: bold; font-family: 'Malgun Gothic';")
         self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.lbl_title)
         
         # Message/Prompt
-        self.lbl_prompt = QLabel("설정 페이지에 진입하려면 비밀번호를 입력해 주세요.")
+        self.lbl_prompt = QLabel("시스템 설정에 진입하려면 관리자 비밀번호를 입력해 주세요.")
         self.lbl_prompt.setStyleSheet(f"color: {styles.TEXT_COLOR}; font-size: 10pt; font-family: 'Malgun Gothic';")
         self.lbl_prompt.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.lbl_prompt)
@@ -2839,6 +2984,444 @@ class BarcodeRefundProgressDialog(QDialog):
         
     def get_result(self):
         return self.result_success, self.result_message
+
+
+class ReceiptRefundConfirmDialog(QDialog):
+    """
+    세련되고 모던한 영수증 환불 확인 다이얼로그
+    """
+    def __init__(self, tx, barcode, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(styles.s(520), styles.s(490))
+        
+        self.tx = tx
+        self.barcode = barcode
+        self.result_value = False
+        
+        self.init_ui()
+
+    def init_ui(self):
+        # Outer Container with Card Style and Drop Shadow
+        self.container = QFrame(self)
+        self.container.setGeometry(styles.s(10), styles.s(10), styles.s(500), styles.s(470))
+        self.container.setStyleSheet(f"""
+            QFrame#main_card {{
+                background-color: #FFFFFF;
+                border-radius: {styles.s(16)}px;
+                border: 1px solid #E2E8F0;
+            }}
+        """)
+        self.container.setObjectName("main_card")
+        
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(24)
+        shadow.setColor(QColor(0, 0, 0, 70))
+        shadow.setOffset(0, 6)
+        self.container.setGraphicsEffect(shadow)
+        
+        main_layout = QVBoxLayout(self.container)
+        main_layout.setContentsMargins(0, 0, 0, styles.s(22))
+        main_layout.setSpacing(styles.s(14))
+        
+        # 1. Header (Deep slate with rounded top)
+        header = QFrame()
+        header.setFixedHeight(styles.s(58))
+        header.setStyleSheet(f"""
+            QFrame {{
+                background-color: #1E293B;
+                border-top-left-radius: {styles.s(16)}px;
+                border-top-right-radius: {styles.s(16)}px;
+                border-bottom: 1px solid #334155;
+            }}
+        """)
+        header_lyt = QHBoxLayout(header)
+        header_lyt.setContentsMargins(styles.s(20), 0, styles.s(15), 0)
+        
+        # Header Badge & Title
+        title_box = QHBoxLayout()
+        title_box.setSpacing(styles.s(8))
+        
+        icon_badge = QLabel("↩")
+        icon_badge.setStyleSheet(f"""
+            background-color: #EF4444;
+            color: white;
+            font-size: {styles.fs(12)};
+            font-weight: bold;
+            border-radius: {styles.s(12)}px;
+            padding: {styles.s(2)}px {styles.s(7)}px;
+            border: none;
+        """)
+        
+        title_lbl = QLabel("영수증 환불 확인")
+        title_lbl.setStyleSheet(f"""
+            color: #F8FAFC;
+            font-size: {styles.fs(15)};
+            font-weight: bold;
+            font-family: '{styles.FONT_FAMILY}';
+            border: none;
+            background: transparent;
+        """)
+        
+        title_box.addWidget(icon_badge)
+        title_box.addWidget(title_lbl)
+        header_lyt.addLayout(title_box)
+        header_lyt.addStretch()
+        
+        # Close Button
+        btn_close = QPushButton("✕")
+        btn_close.setFixedSize(styles.s(32), styles.s(32))
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.setStyleSheet(f"""
+            QPushButton {{
+                color: #94A3B8;
+                background: transparent;
+                border: none;
+                font-size: {styles.fs(13)};
+                font-weight: bold;
+                border-radius: {styles.s(16)}px;
+            }}
+            QPushButton:hover {{
+                color: #FFFFFF;
+                background-color: rgba(255, 255, 255, 0.15);
+            }}
+        """)
+        btn_close.clicked.connect(self.reject)
+        header_lyt.addWidget(btn_close)
+        
+        main_layout.addWidget(header)
+        
+        # Content Padding Container
+        body_container = QWidget()
+        body_lyt = QVBoxLayout(body_container)
+        body_lyt.setContentsMargins(styles.s(24), styles.s(4), styles.s(24), 0)
+        body_lyt.setSpacing(styles.s(14))
+        
+        # 2. Receipt Details Card
+        receipt_card = QFrame()
+        receipt_card.setStyleSheet(f"""
+            QFrame {{
+                background-color: #F8FAFC;
+                border: 1px solid #E2E8F0;
+                border-radius: {styles.s(12)}px;
+            }}
+        """)
+        card_lyt = QVBoxLayout(receipt_card)
+        card_lyt.setContentsMargins(styles.s(18), styles.s(14), styles.s(18), styles.s(14))
+        card_lyt.setSpacing(styles.s(10))
+        
+        # Barcode & Date Header Row
+        tx_num_row = QHBoxLayout()
+        lbl_card_title = QLabel("🧾 영수증 상세 내역")
+        lbl_card_title.setStyleSheet(f"font-size: {styles.fs(11)}; font-weight: bold; color: #64748B; border: none; background: transparent;")
+        tx_num_row.addWidget(lbl_card_title)
+        tx_num_row.addStretch()
+        
+        barcode_badge = QLabel(f"No. {self.barcode}")
+        barcode_badge.setStyleSheet(f"""
+            background-color: #E2E8F0;
+            color: #475569;
+            font-size: {styles.fs(10)};
+            font-weight: bold;
+            border-radius: {styles.s(4)}px;
+            padding: {styles.s(2)}px {styles.s(6)}px;
+            border: none;
+        """)
+        tx_num_row.addWidget(barcode_badge)
+        card_lyt.addLayout(tx_num_row)
+        
+        # Items Info Row
+        items = self.tx.get("items", [])
+        if len(items) == 1:
+            items_desc = f"{items[0].get('name')} {items[0].get('qty')}개"
+        elif len(items) > 1:
+            items_desc = f"{items[0].get('name')} {items[0].get('qty')}개 외 {len(items)-1}건"
+        else:
+            items_desc = "상품 정보 없음"
+            
+        total_amt = self.tx.get("total_amt", 0)
+        pay_method = self.tx.get("payment_method", "결제")
+        method_map = {"Card": "카드", "Cash": "현금", "MobilePay": "모바일페이", "TransitCard": "교통카드"}
+        pay_method_ko = method_map.get(pay_method, pay_method)
+        
+        # Method color styling
+        if pay_method == "Cash":
+            badge_bg = "#ECFDF5"
+            badge_color = "#059669"
+            badge_border = "#A7F3D0"
+            badge_text = "💵 현금 결제건"
+        elif pay_method == "Card":
+            badge_bg = "#EFF6FF"
+            badge_color = "#2563EB"
+            badge_border = "#BFDBFE"
+            badge_text = "💳 신용카드 결제건"
+        elif pay_method == "MobilePay":
+            badge_bg = "#FAF5FF"
+            badge_color = "#9333EA"
+            badge_border = "#E9D5FF"
+            badge_text = "📱 모바일페이 결제건"
+        else:
+            badge_bg = "#F1F5F9"
+            badge_color = "#475569"
+            badge_border = "#CBD5E1"
+            badge_text = f"🏷️ {pay_method_ko}"
+
+        # Items Row
+        item_row = QHBoxLayout()
+        item_lbl_title = QLabel("환불 품목")
+        item_lbl_title.setStyleSheet(f"font-size: {styles.fs(12)}; color: #64748B; border: none; background: transparent;")
+        item_val = QLabel(items_desc)
+        item_val.setStyleSheet(f"font-size: {styles.fs(13)}; font-weight: bold; color: #1E293B; border: none; background: transparent;")
+        item_row.addWidget(item_lbl_title)
+        item_row.addStretch()
+        item_row.addWidget(item_val)
+        card_lyt.addLayout(item_row)
+        
+        # Payment Method Row
+        pm_row = QHBoxLayout()
+        pm_lbl_title = QLabel("결제 수단")
+        pm_lbl_title.setStyleSheet(f"font-size: {styles.fs(12)}; color: #64748B; border: none; background: transparent;")
+        pm_badge = QLabel(badge_text)
+        pm_badge.setStyleSheet(f"""
+            background-color: {badge_bg};
+            color: {badge_color};
+            border: 1px solid {badge_border};
+            border-radius: {styles.s(6)}px;
+            font-size: {styles.fs(11)};
+            font-weight: bold;
+            padding: {styles.s(3)}px {styles.s(8)}px;
+        """)
+        pm_row.addWidget(pm_lbl_title)
+        pm_row.addStretch()
+        pm_row.addWidget(pm_badge)
+        card_lyt.addLayout(pm_row)
+        
+        # Divider inside card
+        card_div = QFrame()
+        card_div.setFrameShape(QFrame.Shape.HLine)
+        card_div.setStyleSheet("border-top: 1px dashed #CBD5E1; background: transparent;")
+        card_lyt.addWidget(card_div)
+        
+        # Amount Row (Highlighted)
+        amt_row = QHBoxLayout()
+        amt_lbl = QLabel("총 환불 금액")
+        amt_lbl.setStyleSheet(f"font-size: {styles.fs(13)}; font-weight: bold; color: #334155; border: none; background: transparent;")
+        amt_val = QLabel(f"{total_amt:,} 원")
+        amt_val.setStyleSheet(f"font-size: {styles.fs(20)}; font-weight: bold; color: #DC2626; border: none; background: transparent;")
+        amt_row.addWidget(amt_lbl)
+        amt_row.addStretch()
+        amt_row.addWidget(amt_val)
+        card_lyt.addLayout(amt_row)
+        
+        body_lyt.addWidget(receipt_card)
+        
+        # 3. Notice / Caution Banner
+        notice_box = QFrame()
+        notice_box.setStyleSheet(f"""
+            QFrame {{
+                background-color: #FEF2F2;
+                border: 1px solid #FECACA;
+                border-radius: {styles.s(8)}px;
+            }}
+        """)
+        notice_lyt = QHBoxLayout(notice_box)
+        notice_lyt.setContentsMargins(styles.s(12), styles.s(8), styles.s(12), styles.s(8))
+        notice_lyt.setSpacing(styles.s(8))
+        
+        notice_icon = QLabel("⚠️")
+        notice_icon.setStyleSheet("border: none; background: transparent; font-size: 13pt;")
+        notice_txt = QLabel("환불 처리 시 해당 결제 건이 취소되고 매출에서 차감됩니다.")
+        notice_txt.setStyleSheet(f"color: #991B1B; font-size: {styles.fs(11)}; font-weight: 500; border: none; background: transparent;")
+        notice_txt.setWordWrap(True)
+        
+        notice_lyt.addWidget(notice_icon)
+        notice_lyt.addWidget(notice_txt, stretch=1)
+        body_lyt.addWidget(notice_box)
+        
+        # 4. Question Text
+        lbl_q = QLabel("정말 환불 처리를 진행하시겠습니까?")
+        lbl_q.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_q.setStyleSheet(f"font-size: {styles.fs(14)}; font-weight: bold; color: #1E293B; margin-top: {styles.s(4)}px; border: none; background: transparent;")
+        body_lyt.addWidget(lbl_q)
+        
+        main_layout.addWidget(body_container)
+        
+        # 5. Buttons Row
+        btn_box = QHBoxLayout()
+        btn_box.setSpacing(styles.s(12))
+        btn_box.setContentsMargins(styles.s(24), 0, styles.s(24), 0)
+        
+        # Cancel (No) Button
+        btn_no = QPushButton("취소 (아니오)")
+        btn_no.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_no.setFixedHeight(styles.s(46))
+        btn_no.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #F1F5F9;
+                color: #475569;
+                font-size: {styles.fs(12)};
+                font-weight: bold;
+                border: 1px solid #CBD5E1;
+                border-radius: {styles.s(8)}px;
+            }}
+            QPushButton:hover {{
+                background-color: #E2E8F0;
+                color: #1E293B;
+            }}
+        """)
+        btn_no.clicked.connect(self.reject)
+        
+        # Confirm (Yes) Button
+        btn_yes = QPushButton("환불 승인 (예)")
+        btn_yes.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_yes.setFixedHeight(styles.s(46))
+        btn_yes.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #DC2626;
+                color: white;
+                font-size: {styles.fs(12)};
+                font-weight: bold;
+                border: none;
+                border-radius: {styles.s(8)}px;
+            }}
+            QPushButton:hover {{
+                background-color: #B91C1C;
+            }}
+            QPushButton:pressed {{
+                background-color: #991B1B;
+            }}
+        """)
+        btn_yes.clicked.connect(self.accept_refund)
+        
+        btn_box.addWidget(btn_no, stretch=1)
+        btn_box.addWidget(btn_yes, stretch=1)
+        
+        main_layout.addLayout(btn_box)
+
+    def accept_refund(self):
+        self.result_value = True
+        self.accept()
+
+    def reject(self):
+        self.result_value = False
+        super().reject()
+
+
+class ReceiptRefundSuccessDialog(QDialog):
+    """
+    세련되고 모던한 환불 완료 안내 다이얼로그
+    """
+    def __init__(self, amount, pay_method_ko, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(styles.s(480), styles.s(390))
+        
+        self.amount = amount
+        self.pay_method_ko = pay_method_ko
+        self.init_ui()
+
+    def init_ui(self):
+        self.container = QFrame(self)
+        self.container.setGeometry(styles.s(10), styles.s(10), styles.s(460), styles.s(370))
+        self.container.setStyleSheet(f"""
+            QFrame#success_card {{
+                background-color: #FFFFFF;
+                border-radius: {styles.s(16)}px;
+                border: 1px solid #E2E8F0;
+            }}
+        """)
+        self.container.setObjectName("success_card")
+        
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(24)
+        shadow.setColor(QColor(0, 0, 0, 70))
+        shadow.setOffset(0, 6)
+        self.container.setGraphicsEffect(shadow)
+        
+        main_layout = QVBoxLayout(self.container)
+        main_layout.setContentsMargins(styles.s(28), styles.s(28), styles.s(28), styles.s(24))
+        main_layout.setSpacing(styles.s(14))
+        main_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Success Icon Badge
+        icon_lbl = QLabel("✅")
+        icon_lbl.setStyleSheet(f"font-size: {styles.fs(40)}; border: none; background: transparent;")
+        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(icon_lbl)
+        
+        # Title
+        title_lbl = QLabel("환불 처리가 완료되었습니다")
+        title_lbl.setStyleSheet(f"""
+            color: #0F172A;
+            font-size: {styles.fs(17)};
+            font-weight: bold;
+            font-family: '{styles.FONT_FAMILY}';
+            border: none;
+            background: transparent;
+        """)
+        title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(title_lbl)
+        
+        # Detail Card
+        detail_card = QFrame()
+        detail_card.setStyleSheet(f"""
+            background-color: #F8FAFC;
+            border: 1px solid #E2E8F0;
+            border-radius: {styles.s(10)}px;
+        """)
+        detail_lyt = QVBoxLayout(detail_card)
+        detail_lyt.setContentsMargins(styles.s(18), styles.s(14), styles.s(18), styles.s(14))
+        detail_lyt.setSpacing(styles.s(8))
+        
+        # Row 1: Amount
+        r1 = QHBoxLayout()
+        l1 = QLabel("환불 금액")
+        l1.setStyleSheet(f"font-size: {styles.fs(12)}; color: #64748B; border: none; background: transparent;")
+        v1 = QLabel(f"{self.amount:,} 원")
+        v1.setStyleSheet(f"font-size: {styles.fs(16)}; font-weight: bold; color: #059669; border: none; background: transparent;")
+        r1.addWidget(l1)
+        r1.addStretch()
+        r1.addWidget(v1)
+        detail_lyt.addLayout(r1)
+        
+        # Row 2: Method
+        r2 = QHBoxLayout()
+        l2 = QLabel("반환 수단")
+        l2.setStyleSheet(f"font-size: {styles.fs(12)}; color: #64748B; border: none; background: transparent;")
+        v2 = QLabel(f"{self.pay_method_ko} 반환 완료")
+        v2.setStyleSheet(f"font-size: {styles.fs(12)}; font-weight: bold; color: #334155; border: none; background: transparent;")
+        r2.addWidget(l2)
+        r2.addStretch()
+        r2.addWidget(v2)
+        detail_lyt.addLayout(r2)
+        
+        main_layout.addWidget(detail_card)
+        main_layout.addStretch()
+        
+        # Confirm Button
+        btn_ok = QPushButton("확인 (닫기)")
+        btn_ok.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_ok.setFixedHeight(styles.s(46))
+        btn_ok.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #059669;
+                color: white;
+                font-size: {styles.fs(13)};
+                font-weight: bold;
+                border: none;
+                border-radius: {styles.s(8)}px;
+            }}
+            QPushButton:hover {{
+                background-color: #047857;
+            }}
+            QPushButton:pressed {{
+                background-color: #065F46;
+            }}
+        """)
+        btn_ok.clicked.connect(self.accept)
+        main_layout.addWidget(btn_ok)
 
 
 class QtySelectorWidget(QWidget):

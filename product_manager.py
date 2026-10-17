@@ -3,17 +3,17 @@ import os
 
 # Default data optimized for installation with requested products
 DEFAULT_PRODUCTS = {
-    "8801111900010": {"name": "초코파이", "price": 1700, "category": "과자류", "stock": 100, "promo_type": 0, "is_quick": True},
+    "8801111900010": {"name": "초코파이", "price": 1700, "category": "과자류", "stock": 100, "promo_type": 1, "is_quick": True},
     "8801111900027": {"name": "새우깡", "price": 1900, "category": "과자류", "stock": 100, "promo_type": 0, "is_quick": True},
-    "8801111900034": {"name": "양파링", "price": 2200, "category": "과자류", "stock": 100, "promo_type": 0, "is_quick": False},
-    "8801111900041": {"name": "빅파이", "price": 1300, "category": "과자류", "stock": 100, "promo_type": 0, "is_quick": False},
-    "8801111900058": {"name": "칸쵸", "price": 1400, "category": "과자류", "stock": 100, "promo_type": 0, "is_quick": False},
+    "8801111900034": {"name": "양파링", "price": 2200, "category": "과자류", "stock": 100, "promo_type": 0, "is_quick": True},
+    "8801111900041": {"name": "빅파이", "price": 1300, "category": "과자류", "stock": 100, "promo_type": 0, "is_quick": True},
+    "8801111900058": {"name": "칸쵸", "price": 1400, "category": "과자류", "stock": 100, "promo_type": 0, "is_quick": True},
     "8801111900065": {"name": "코코볼", "price": 4500, "category": "과자류", "stock": 100, "promo_type": 0, "is_quick": False},
-    "8801111900072": {"name": "진라면", "price": 1400, "category": "간편식사", "stock": 100, "promo_type": 0, "is_quick": True},
-    "8801111900089": {"name": "짜파게티", "price": 1700, "category": "간편식사", "stock": 100, "promo_type": 0, "is_quick": True},
-    "8801111900096": {"name": "신라면", "price": 1200, "category": "간편식사", "stock": 100, "promo_type": 0, "is_quick": True},
-    "8801111900102": {"name": "콜라", "price": 1600, "category": "음료류", "stock": 100, "promo_type": 0, "is_quick": True},
-    "8801111900119": {"name": "사이다", "price": 1400, "category": "음료류", "stock": 100, "promo_type": 0, "is_quick": True},
+    "8801111900072": {"name": "진라면", "price": 1400, "category": "간편식사", "stock": 100, "promo_type": 0, "is_quick": False},
+    "8801111900089": {"name": "짜파게티", "price": 1700, "category": "간편식사", "stock": 100, "promo_type": 0, "is_quick": False},
+    "8801111900096": {"name": "신라면", "price": 1200, "category": "간편식사", "stock": 100, "promo_type": 0, "is_quick": False},
+    "8801111900102": {"name": "콜라", "price": 1600, "category": "음료류", "stock": 100, "promo_type": 0, "is_quick": False},
+    "8801111900119": {"name": "사이다", "price": 1400, "category": "음료류", "stock": 100, "promo_type": 0, "is_quick": False},
     "8801111900126": {"name": "환타", "price": 1300, "category": "음료류", "stock": 100, "promo_type": 0, "is_quick": False},
     "8801111900133": {"name": "카페라떼", "price": 3500, "category": "음료류", "stock": 100, "promo_type": 0, "is_quick": False},
     "8801111900140": {"name": "아메리카노", "price": 2200, "category": "음료류", "stock": 100, "promo_type": 0, "is_quick": False},
@@ -126,6 +126,16 @@ class ProductManager:
             if len(quick_list) >= limit:
                 break
         return quick_list
+
+    def get_quick_items_count(self):
+        return sum(1 for p in self.products.values() if p.get("is_quick", False))
+
+    def set_quick_item(self, barcode, is_quick):
+        if barcode in self.products:
+            self.products[barcode]["is_quick"] = is_quick
+            self.save_products()
+            return True
+        return False
 
     def load_vouchers(self):
         if not os.path.exists(VOUCHER_FILE):

@@ -209,8 +209,9 @@ class ProductRegistrationDialog(QDialog):
         self.btn_regen_bc.clicked.connect(self.generate_new_barcode)
         barcode_hdr.addWidget(self.btn_regen_bc)
         
-        self.check_quick = QCheckBox("단축 등록")
+        self.check_quick = QCheckBox("단축 등록 (0/5)")
         self.check_quick.setStyleSheet(MODERN_CHECKBOX_STYLE)
+        self.check_quick.clicked.connect(self.on_check_quick_clicked)
         
         self.input_barcode = QLineEdit()
         self.input_barcode.setReadOnly(True)
@@ -394,6 +395,24 @@ class ProductRegistrationDialog(QDialog):
         
         # Set focus to product name initially
         self.input_name.setFocus()
+        self.update_quick_checkbox_text()
+
+    def update_quick_checkbox_text(self):
+        count = self.product_manager.get_quick_items_count()
+        self.check_quick.setText(f"단축 등록 ({count}/5)")
+
+    def on_check_quick_clicked(self, checked):
+        if checked:
+            count = self.product_manager.get_quick_items_count()
+            was_quick = False
+            if self.editing_barcode:
+                p = self.product_manager.get_product(self.editing_barcode)
+                if p and p.get("is_quick", False):
+                    was_quick = True
+            if not was_quick and count >= 5:
+                self.check_quick.setChecked(False)
+                self.show_alert("알림", "단축 등록은 메인 화면에 표시되는 최대 5개까지만 등록할 수 있습니다.\n기존 등록된 단축 상품(★)을 먼저 해제해 주세요.", 'warning')
+        self.update_quick_checkbox_text()
 
     def toggle_manual_barcode(self):
         self.is_manual_barcode = not self.is_manual_barcode
@@ -502,6 +521,7 @@ class ProductRegistrationDialog(QDialog):
         self.combo_category.setCurrentText(combo_text)
         
         self.check_quick.setChecked(product.get("is_quick", False))
+        self.update_quick_checkbox_text()
         
         # Load image preview
         existing_path = self.get_existing_image_path(self.editing_barcode)
@@ -559,6 +579,16 @@ class ProductRegistrationDialog(QDialog):
             self.show_alert("경고", "상품명을 입력해주세요.", 'warning')
             self.input_name.setFocus()
             return
+            
+        if is_quick:
+            was_quick = False
+            if self.editing_barcode:
+                p = self.product_manager.get_product(self.editing_barcode)
+                if p and p.get("is_quick", False):
+                    was_quick = True
+            if not was_quick and self.product_manager.get_quick_items_count() >= 5:
+                self.show_alert("경고", "단축 상품은 메인 화면에 표시되는 최대 5개까지만 등록할 수 있습니다.\n기존 등록된 상품(★)을 먼저 해제해 주세요.", 'warning')
+                return
             
         if not price_str:
             self.show_alert("경고", "단가를 입력해주세요.", 'warning')
@@ -817,6 +847,7 @@ class SettingsPage(QWidget):
         self.clear_form()
         self.load_voucher_data()
         self.clear_v_form()
+        self.set_mode("products")
 
     def create_header(self):
         header_frame = QFrame()
@@ -825,16 +856,33 @@ class SettingsPage(QWidget):
         header_layout = QHBoxLayout(header_frame)
         header_layout.setContentsMargins(30, 0, 30, 0)
         
-        lbl_title = QLabel("상품 관리 설정")
-        lbl_title.setStyleSheet("font-size: 24pt; font-weight: bold; color: #333;")
-        header_layout.addWidget(lbl_title)
+        self.lbl_header_title = QLabel("상품 관리")
+        self.lbl_header_title.setStyleSheet("font-size: 24pt; font-weight: bold; color: #333;")
+        header_layout.addWidget(self.lbl_header_title)
         
         header_layout.addStretch()
         
-        lbl_breadcrumb = QLabel("설정 > 상품관리")
-        lbl_breadcrumb.setStyleSheet("font-size: 14pt; color: #777;")
-        header_layout.addWidget(lbl_breadcrumb)
+        self.lbl_breadcrumb = QLabel("홈 > 상품관리")
+        self.lbl_breadcrumb.setStyleSheet("font-size: 14pt; color: #777;")
+        header_layout.addWidget(self.lbl_breadcrumb)
         self.main_layout.addWidget(header_frame)
+
+    def set_mode(self, mode="products"):
+        self.mode = mode
+        if mode == "system":
+            self.lbl_header_title.setText("시스템 설정")
+            self.lbl_breadcrumb.setText("설정 > 시스템 설정")
+            self.tab_widget.setTabVisible(0, False)
+            self.tab_widget.setTabVisible(1, False)
+            self.tab_widget.setTabVisible(2, True)
+            self.tab_widget.setCurrentWidget(self.system_tab)
+        else: # "products"
+            self.lbl_header_title.setText("상품 관리")
+            self.lbl_breadcrumb.setText("홈 > 상품관리")
+            self.tab_widget.setTabVisible(0, True)
+            self.tab_widget.setTabVisible(1, True)
+            self.tab_widget.setTabVisible(2, False)
+            self.tab_widget.setCurrentWidget(self.product_tab)
 
     def create_left_panel(self):
         # Left card frame
@@ -937,6 +985,7 @@ class SettingsPage(QWidget):
         self.table.setColumnWidth(4, styles.s(70))  # Promo
         self.table.setColumnWidth(5, styles.s(100)) # Category
         self.table.setColumnWidth(6, styles.s(60))  # Quick
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -953,7 +1002,7 @@ class SettingsPage(QWidget):
         # Right action card frame with vertical buttons
         self.product_action_card = QFrame()
         self.product_action_card.setObjectName("product_action_card")
-        self.product_action_card.setFixedWidth(styles.s(190))
+        self.product_action_card.setFixedWidth(styles.s(260))
         self.product_action_card.setStyleSheet("""
             QFrame#product_action_card {
                 background-color: white;
@@ -963,8 +1012,8 @@ class SettingsPage(QWidget):
         """)
         
         action_layout = QVBoxLayout(self.product_action_card)
-        action_layout.setContentsMargins(15, 20, 15, 20)
-        action_layout.setSpacing(12)
+        action_layout.setContentsMargins(styles.s(12), styles.s(18), styles.s(12), styles.s(18))
+        action_layout.setSpacing(styles.s(10))
         
         lbl_action_title = QLabel("상품 관리 메뉴")
         lbl_action_title.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR}; border: none; background: transparent;")
@@ -979,124 +1028,190 @@ class SettingsPage(QWidget):
         # 1. New Product Button
         self.btn_open_add_dialog = QPushButton("✨ 새 상품 추가")
         self.btn_open_add_dialog.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_open_add_dialog.setFixedHeight(styles.s(48))
+        self.btn_open_add_dialog.setFixedHeight(styles.s(44))
         self.btn_open_add_dialog.setStyleSheet(f"""
             QPushButton {{
                 background-color: {styles.PRIMARY_PURPLE};
                 color: white;
                 border: none;
                 border-radius: {styles.s(8)}px;
+                padding: 0px {styles.s(4)}px;
                 font-family: '{styles.FONT_FAMILY}';
-                font-size: {styles.fs(13.5)};
+                font-size: {styles.fs(13)};
                 font-weight: bold;
             }}
-            QPushButton:hover {{
-                background-color: #6366F1;
-            }}
-            QPushButton:pressed {{
-                background-color: {styles.DARK_PURPLE};
-            }}
+            QPushButton:hover {{ background-color: #6366F1; }}
+            QPushButton:pressed {{ background-color: {styles.DARK_PURPLE}; }}
         """)
         self.btn_open_add_dialog.clicked.connect(self.open_new_product_dialog)
         action_layout.addWidget(self.btn_open_add_dialog)
         
-        # 2. Edit Selected Button
+        # Row 1: Edit & Delete Selected Buttons
+        row1_layout = QHBoxLayout()
+        row1_layout.setSpacing(styles.s(8))
+        
         self.btn_edit_selected = QPushButton("✏️ 선택 수정")
         self.btn_edit_selected.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_edit_selected.setFixedHeight(styles.s(48))
+        self.btn_edit_selected.setFixedHeight(styles.s(42))
         self.btn_edit_selected.setStyleSheet(f"""
             QPushButton {{
                 background-color: #10B981;
                 color: white;
                 border: none;
                 border-radius: {styles.s(8)}px;
+                padding: 0px {styles.s(2)}px;
                 font-family: '{styles.FONT_FAMILY}';
-                font-size: {styles.fs(13.5)};
+                font-size: {styles.fs(11.5)};
                 font-weight: bold;
             }}
-            QPushButton:hover {{
-                background-color: #059669;
-            }}
-            QPushButton:pressed {{
-                background-color: #047857;
-            }}
+            QPushButton:hover {{ background-color: #059669; }}
+            QPushButton:pressed {{ background-color: #047857; }}
         """)
         self.btn_edit_selected.clicked.connect(self.edit_selected_product)
-        action_layout.addWidget(self.btn_edit_selected)
+        row1_layout.addWidget(self.btn_edit_selected)
         
-        # 3. Delete Selected Button
         self.btn_delete_selected = QPushButton("🗑️ 선택 삭제")
         self.btn_delete_selected.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_delete_selected.setFixedHeight(styles.s(48))
+        self.btn_delete_selected.setFixedHeight(styles.s(42))
         self.btn_delete_selected.setStyleSheet(f"""
             QPushButton {{
                 background-color: #EF4444;
                 color: white;
                 border: none;
                 border-radius: {styles.s(8)}px;
+                padding: 0px {styles.s(2)}px;
                 font-family: '{styles.FONT_FAMILY}';
-                font-size: {styles.fs(13.5)};
+                font-size: {styles.fs(11.5)};
                 font-weight: bold;
             }}
-            QPushButton:hover {{
-                background-color: #DC2626;
-            }}
-            QPushButton:pressed {{
-                background-color: #B91C1C;
-            }}
+            QPushButton:hover {{ background-color: #DC2626; }}
+            QPushButton:pressed {{ background-color: #B91C1C; }}
         """)
         self.btn_delete_selected.clicked.connect(self.delete_selected_product)
-        action_layout.addWidget(self.btn_delete_selected)
+        row1_layout.addWidget(self.btn_delete_selected)
+        action_layout.addLayout(row1_layout)
         
-        # 4. Print Selected Barcode Button
-        self.btn_print_barcode = QPushButton("🖨️ 바코드 인쇄")
+        # Row 2: Print Barcodes (Selected / All)
+        row2_layout = QHBoxLayout()
+        row2_layout.setSpacing(styles.s(8))
+        
+        self.btn_print_barcode = QPushButton("🖨️ 바코드 선택")
         self.btn_print_barcode.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_print_barcode.setFixedHeight(styles.s(48))
+        self.btn_print_barcode.setFixedHeight(styles.s(40))
         self.btn_print_barcode.setStyleSheet(f"""
             QPushButton {{
-                background-color: #F3F4F6;
-                color: #374151;
-                border: 1px solid #D1D5DB;
+                background-color: #F1F5F9;
+                color: #334155;
+                border: 1px solid #CBD5E1;
                 border-radius: {styles.s(8)}px;
+                padding: 0px {styles.s(2)}px;
                 font-family: '{styles.FONT_FAMILY}';
-                font-size: {styles.fs(13)};
+                font-size: {styles.fs(11)};
                 font-weight: bold;
             }}
-            QPushButton:hover {{
-                background-color: #E5E7EB;
-                color: #111827;
-            }}
-            QPushButton:pressed {{
-                background-color: #D1D5DB;
-            }}
+            QPushButton:hover {{ background-color: #E2E8F0; color: #0F172A; }}
+            QPushButton:pressed {{ background-color: #CBD5E1; }}
         """)
         self.btn_print_barcode.clicked.connect(self.print_selected_barcode)
-        action_layout.addWidget(self.btn_print_barcode)
+        row2_layout.addWidget(self.btn_print_barcode)
         
-        # 5. Print All Barcodes Button
-        self.btn_print_all = QPushButton("📋 전체 바코드")
+        self.btn_print_all = QPushButton("📋 바코드 전체")
         self.btn_print_all.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_print_all.setFixedHeight(styles.s(48))
+        self.btn_print_all.setFixedHeight(styles.s(40))
         self.btn_print_all.setStyleSheet(f"""
             QPushButton {{
-                background-color: #F3F4F6;
-                color: #374151;
-                border: 1px solid #D1D5DB;
+                background-color: #F1F5F9;
+                color: #334155;
+                border: 1px solid #CBD5E1;
                 border-radius: {styles.s(8)}px;
+                padding: 0px {styles.s(2)}px;
                 font-family: '{styles.FONT_FAMILY}';
-                font-size: {styles.fs(13)};
+                font-size: {styles.fs(11)};
                 font-weight: bold;
             }}
-            QPushButton:hover {{
-                background-color: #E5E7EB;
-                color: #111827;
-            }}
-            QPushButton:pressed {{
-                background-color: #D1D5DB;
-            }}
+            QPushButton:hover {{ background-color: #E2E8F0; color: #0F172A; }}
+            QPushButton:pressed {{ background-color: #CBD5E1; }}
         """)
         self.btn_print_all.clicked.connect(self.print_all_barcodes)
-        action_layout.addWidget(self.btn_print_all)
+        row2_layout.addWidget(self.btn_print_all)
+        action_layout.addLayout(row2_layout)
+        
+        # Section Divider for POP Shelf Labels
+        line_pop = QFrame()
+        line_pop.setFrameShape(QFrame.Shape.HLine)
+        line_pop.setStyleSheet("border: none; background-color: #E2E8F0; height: 1px; margin: 4px 0;")
+        action_layout.addWidget(line_pop)
+        
+        lbl_pop_title = QLabel("🏷️ 매장 진열대 가격표 (POP)")
+        lbl_pop_title.setStyleSheet(f"font-size: {styles.FONT_SIZE_SMALL}; font-weight: bold; color: #475569; background: transparent;")
+        lbl_pop_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        action_layout.addWidget(lbl_pop_title)
+        
+        # Row 3: POP Selected & Promo
+        row3_layout = QHBoxLayout()
+        row3_layout.setSpacing(styles.s(8))
+        
+        self.btn_pop_selected = QPushButton("🏷️ 선택 POP")
+        self.btn_pop_selected.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_pop_selected.setFixedHeight(styles.s(42))
+        self.btn_pop_selected.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #2563EB;
+                color: white;
+                border: none;
+                border-radius: {styles.s(8)}px;
+                padding: 0px {styles.s(2)}px;
+                font-family: '{styles.FONT_FAMILY}';
+                font-size: {styles.fs(11.5)};
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: #1D4ED8; }}
+            QPushButton:pressed {{ background-color: #1E40AF; }}
+        """)
+        self.btn_pop_selected.clicked.connect(self.print_selected_pop)
+        row3_layout.addWidget(self.btn_pop_selected)
+        
+        self.btn_pop_promo = QPushButton("🔥 행사 POP")
+        self.btn_pop_promo.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_pop_promo.setFixedHeight(styles.s(42))
+        self.btn_pop_promo.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #EA580C;
+                color: white;
+                border: none;
+                border-radius: {styles.s(8)}px;
+                padding: 0px {styles.s(2)}px;
+                font-family: '{styles.FONT_FAMILY}';
+                font-size: {styles.fs(11.5)};
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: #C2410C; }}
+            QPushButton:pressed {{ background-color: #9A3412; }}
+        """)
+        self.btn_pop_promo.clicked.connect(self.print_promo_pop)
+        row3_layout.addWidget(self.btn_pop_promo)
+        action_layout.addLayout(row3_layout)
+        
+        # Row 4: POP All
+        self.btn_pop_all = QPushButton("📋 전체 진열대 POP 출력")
+        self.btn_pop_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_pop_all.setFixedHeight(styles.s(42))
+        self.btn_pop_all.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #0D9488;
+                color: white;
+                border: none;
+                border-radius: {styles.s(8)}px;
+                padding: 0px {styles.s(4)}px;
+                font-family: '{styles.FONT_FAMILY}';
+                font-size: {styles.fs(12)};
+                font-weight: bold;
+            }}
+            QPushButton:hover {{ background-color: #0F766E; }}
+            QPushButton:pressed {{ background-color: #115E59; }}
+        """)
+        self.btn_pop_all.clicked.connect(self.print_all_pop)
+        action_layout.addWidget(self.btn_pop_all)
         
         action_layout.addStretch()
 
@@ -1311,6 +1426,7 @@ class SettingsPage(QWidget):
         
         self.check_quick = QCheckBox("단축 등록")
         self.check_quick.setStyleSheet(MODERN_CHECKBOX_STYLE)
+        self.check_quick.clicked.connect(self.on_panel_check_quick_clicked)
         
         # Add to grid: Barcode (Row 0, Col 0, span 1), Checkbox (Row 0, Col 1, span 1)
         grid.addLayout(barcode_header_layout, 0, 0)
@@ -1424,35 +1540,101 @@ class SettingsPage(QWidget):
         self.btn_add.clicked.connect(self.save_product)
         btn_panel.addWidget(self.btn_add)
         
-        # Barcode printing group
+        # Barcode & POP printing group
         print_group = QFrame()
-        print_group.setStyleSheet("QFrame { background-color: #F9FAFB; border: 1px solid #E5E7EB; border-radius: 8px; } QLabel { border: none; background: transparent; }")
+        print_group.setStyleSheet("QFrame { background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 8px; } QLabel { border: none; background: transparent; }")
         print_layout = QVBoxLayout(print_group)
         print_layout.setContentsMargins(8, 8, 8, 8)
-        print_layout.setSpacing(4)
+        print_layout.setSpacing(5)
         
-        lbl_print_title = QLabel("바코드 출력")
-        lbl_print_title.setStyleSheet(f"font-size: {styles.FONT_SIZE_SMALL}; font-weight: bold; color: #4B5563; background: transparent;")
+        lbl_print_title = QLabel("🏷️ 바코드 & 진열대 가격표(POP) 출력")
+        lbl_print_title.setStyleSheet(f"font-size: {styles.FONT_SIZE_SMALL}; font-weight: bold; color: #334155; background: transparent;")
         print_layout.addWidget(lbl_print_title)
         
-        print_btn_layout = QHBoxLayout()
-        print_btn_layout.setSpacing(6)
+        # Row 1: Barcode label printing
+        barcode_btn_layout = QHBoxLayout()
+        barcode_btn_layout.setSpacing(6)
         
-        self.btn_print_selected = QPushButton("선택 출력")
+        self.btn_print_selected = QPushButton("바코드 선택")
         self.btn_print_selected.setStyleSheet(MODERN_BTN_PURPLE)
-        self.btn_print_selected.setFixedHeight(styles.s(36))
+        self.btn_print_selected.setFixedHeight(styles.s(34))
         self.btn_print_selected.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_print_selected.clicked.connect(self.print_selected_barcode)
         
-        self.btn_print_all = QPushButton("전체 출력")
+        self.btn_print_all = QPushButton("바코드 전체")
         self.btn_print_all.setStyleSheet(MODERN_BTN_PURPLE)
-        self.btn_print_all.setFixedHeight(styles.s(36))
+        self.btn_print_all.setFixedHeight(styles.s(34))
         self.btn_print_all.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_print_all.clicked.connect(self.print_all_barcodes)
         
-        print_btn_layout.addWidget(self.btn_print_selected)
-        print_btn_layout.addWidget(self.btn_print_all)
-        print_layout.addLayout(print_btn_layout)
+        barcode_btn_layout.addWidget(self.btn_print_selected)
+        barcode_btn_layout.addWidget(self.btn_print_all)
+        print_layout.addLayout(barcode_btn_layout)
+        
+        # Row 2: POP Price tags (Selected & Promo)
+        MODERN_BTN_BLUE = f"""
+            QPushButton {{
+                background-color: #2563EB;
+                color: white;
+                font-size: {styles.fs(10.5)};
+                font-weight: bold;
+                border-radius: {styles.s(6)}px;
+                border: none;
+                font-family: '{styles.FONT_FAMILY}';
+            }}
+            QPushButton:hover {{ background-color: #1D4ED8; }}
+        """
+        MODERN_BTN_ORANGE = f"""
+            QPushButton {{
+                background-color: #EA580C;
+                color: white;
+                font-size: {styles.fs(10.5)};
+                font-weight: bold;
+                border-radius: {styles.s(6)}px;
+                border: none;
+                font-family: '{styles.FONT_FAMILY}';
+            }}
+            QPushButton:hover {{ background-color: #C2410C; }}
+        """
+        MODERN_BTN_TEAL = f"""
+            QPushButton {{
+                background-color: #0D9488;
+                color: white;
+                font-size: {styles.fs(10.5)};
+                font-weight: bold;
+                border-radius: {styles.s(6)}px;
+                border: none;
+                font-family: '{styles.FONT_FAMILY}';
+            }}
+            QPushButton:hover {{ background-color: #0F766E; }}
+        """
+        
+        pop_btn_layout = QHBoxLayout()
+        pop_btn_layout.setSpacing(6)
+        
+        self.btn_pop_selected = QPushButton("선택 가격표 POP")
+        self.btn_pop_selected.setStyleSheet(MODERN_BTN_BLUE)
+        self.btn_pop_selected.setFixedHeight(styles.s(34))
+        self.btn_pop_selected.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_pop_selected.clicked.connect(self.print_selected_pop)
+        
+        self.btn_pop_promo = QPushButton("🔥 행사상품 POP")
+        self.btn_pop_promo.setStyleSheet(MODERN_BTN_ORANGE)
+        self.btn_pop_promo.setFixedHeight(styles.s(34))
+        self.btn_pop_promo.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_pop_promo.clicked.connect(self.print_promo_pop)
+        
+        pop_btn_layout.addWidget(self.btn_pop_selected)
+        pop_btn_layout.addWidget(self.btn_pop_promo)
+        print_layout.addLayout(pop_btn_layout)
+        
+        # Row 3: All products POP
+        self.btn_pop_all = QPushButton("📋 전체 진열대 가격표(POP) 출력")
+        self.btn_pop_all.setStyleSheet(MODERN_BTN_TEAL)
+        self.btn_pop_all.setFixedHeight(styles.s(34))
+        self.btn_pop_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_pop_all.clicked.connect(self.print_all_pop)
+        print_layout.addWidget(self.btn_pop_all)
         
         btn_panel.addWidget(print_group)
         
@@ -1506,6 +1688,12 @@ class SettingsPage(QWidget):
         products = self.product_manager.get_all_products()
         self.table.setRowCount(len(products))
         
+        # 단축 등록 개수 헤더 표시 (최대 5개)
+        quick_cnt = self.product_manager.get_quick_items_count()
+        self.table.setHorizontalHeaderItem(6, QTableWidgetItem(f"단축 ({quick_cnt}/5)"))
+        if hasattr(self, 'check_quick'):
+            self.check_quick.setText(f"단축 등록 ({quick_cnt}/5)")
+        
         row = 0
         for barcode, data in products.items():
             self.table.setItem(row, 0, QTableWidgetItem(barcode))
@@ -1518,7 +1706,10 @@ class SettingsPage(QWidget):
             
             is_quick = data.get("is_quick", False)
             quick_text = "★ 등록" if is_quick else ""
-            self.table.setItem(row, 6, QTableWidgetItem(quick_text))
+            quick_item = QTableWidgetItem(quick_text)
+            if is_quick:
+                quick_item.setForeground(QColor("#7C3AED"))
+            self.table.setItem(row, 6, quick_item)
             
             # Alignments
             self.table.item(row, 2).setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -1547,6 +1738,30 @@ class SettingsPage(QWidget):
 
     def on_table_click(self, row, col):
         self.table.selectRow(row)
+        # 6번 열(단축) 클릭 시 1클릭으로 바로 토글
+        if col == 6:
+            barcode_item = self.table.item(row, 0)
+            if barcode_item:
+                barcode = barcode_item.text().strip()
+                product = self.product_manager.get_product(barcode)
+                if product:
+                    is_currently_quick = product.get("is_quick", False)
+                    if is_currently_quick:
+                        self.product_manager.set_quick_item(barcode, False)
+                        self.load_data()
+                        self.table.selectRow(row)
+                    else:
+                        if self.product_manager.get_quick_items_count() >= 5:
+                            CustomMessageDialog(
+                                "단축 등록 제한", 
+                                "단축 상품은 메인 화면에 최대 5개까지만 등록할 수 있습니다.\n기존 등록된 단축 상품(★)을 먼저 해제해 주세요.", 
+                                'warning', 
+                                self
+                            ).exec()
+                        else:
+                            self.product_manager.set_quick_item(barcode, True)
+                            self.load_data()
+                            self.table.selectRow(row)
 
     def on_table_double_click(self, row, col):
         self.edit_selected_product()
@@ -1624,6 +1839,18 @@ class SettingsPage(QWidget):
         dialog.exec()
         return dialog.result_value
 
+    def on_panel_check_quick_clicked(self, checked):
+        if checked:
+            count = self.product_manager.get_quick_items_count()
+            was_quick = False
+            if hasattr(self, 'current_editing_barcode') and self.current_editing_barcode:
+                p = self.product_manager.get_product(self.current_editing_barcode)
+                if p and p.get("is_quick", False):
+                    was_quick = True
+            if not was_quick and count >= 5:
+                self.check_quick.setChecked(False)
+                self.show_alert("알림", "단축 상품은 메인 화면에 최대 5개까지만 등록할 수 있습니다.\n기존 등록된 상품(★)을 먼저 해제해 주세요.", 'warning')
+
     def save_product(self):
         barcode = self.input_barcode.text().strip()
         name = self.input_name.text().strip()
@@ -1632,6 +1859,16 @@ class SettingsPage(QWidget):
         promo_type = self.combo_promo.currentIndex()
         category = self.combo_category.currentText().strip()
         is_quick = self.check_quick.isChecked()
+        
+        if is_quick:
+            was_quick = False
+            if hasattr(self, 'current_editing_barcode') and self.current_editing_barcode:
+                p = self.product_manager.get_product(self.current_editing_barcode)
+                if p and p.get("is_quick", False):
+                    was_quick = True
+            if not was_quick and self.product_manager.get_quick_items_count() >= 5:
+                self.show_alert("경고", "단축 상품은 최대 5개까지만 등록할 수 있습니다.\n기존 등록된 상품(★)을 먼저 해제해 주세요.", 'warning')
+                return
 
         # Auto generate general product barcode starting with 88 (Korean retail standard code prefix) if not editing
         if not self.current_editing_barcode:
@@ -1864,6 +2101,197 @@ class SettingsPage(QWidget):
         from ui_components import ReceiptPreviewDialog
         dialog = ReceiptPreviewDialog(html, self)
         dialog.setFixedSize(450, 750)
+        dialog.exec()
+
+    def generate_pop_label_html(self, products_list, title="매장 진열대 가격표(POP)"):
+        cards_html = ""
+        for p in products_list:
+            barcode = p.get("barcode", "")
+            name = p.get("name", "")
+            price = p.get("price", 0)
+            category = p.get("category", "일반")
+            promo_type = p.get("promo_type", 0)
+            
+            barcode_img = self.receipt_manager.generate_barcode_base64(barcode)
+            spaced_barcode = " ".join([barcode[i:i+4] for i in range(0, len(barcode), 4)])
+            
+            if promo_type == 1:
+                badge_html = '<td align="right" style="background:#EF4444; color:white; font-size:12pt; font-weight:bold; padding:4px 10px; border-radius:4px;">1 + 1</td>'
+                unit_price = round(price / 2)
+                calc_html = f'''
+                <tr>
+                    <td colspan="2" style="background-color: #FEF2F2; border: 1px dashed #EF4444; padding: 6px; text-align: center; color: #DC2626; font-size: 10pt; font-weight: bold;">
+                        ★ 1+1 행사 혜택! 개당 <b style="font-size:11pt;">{unit_price:,}원</b>
+                    </td>
+                </tr>
+                '''
+                border_color = "#EF4444"
+            elif promo_type == 2:
+                badge_html = '<td align="right" style="background:#F59E0B; color:white; font-size:12pt; font-weight:bold; padding:4px 10px; border-radius:4px;">2 + 1</td>'
+                unit_price = round((price * 2) / 3)
+                calc_html = f'''
+                <tr>
+                    <td colspan="2" style="background-color: #FFFBEB; border: 1px dashed #F59E0B; padding: 6px; text-align: center; color: #D97706; font-size: 10pt; font-weight: bold;">
+                        ★ 2+1 행사 혜택! 개당 <b style="font-size:11pt;">{unit_price:,}원</b>
+                    </td>
+                </tr>
+                '''
+                border_color = "#F59E0B"
+            else:
+                badge_html = f'<td align="right" style="background:#EEF2FF; color:#4F46E5; border:1px solid #C7D2FE; font-size:10pt; font-weight:bold; padding:3px 8px; border-radius:4px;">{category}</td>'
+                calc_html = '''
+                <tr>
+                    <td colspan="2" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 5px; text-align: center; color: #64748B; font-size: 9.5pt;">
+                        DU 편의점 엄선 추천 상품
+                    </td>
+                </tr>
+                '''
+                border_color = "#94A3B8"
+                
+            card = f'''
+            <table align="center" width="340" cellpadding="8" cellspacing="0" style="border: 2px solid {border_color}; background-color: #FFFFFF; margin: 10px auto; font-family: 'Malgun Gothic', sans-serif;">
+                <!-- Header row -->
+                <tr>
+                    <td align="left" style="vertical-align: middle;">
+                        <span style="background-color: #1E293B; color: #FFFFFF; font-size: 9.5pt; font-weight: bold; padding: 3px 6px;">DU 편의점</span>
+                        <span style="color: #64748B; font-size: 9.5pt; font-weight: bold; margin-left: 6px;">{category}</span>
+                    </td>
+                    {badge_html}
+                </tr>
+                
+                <!-- Product Name -->
+                <tr>
+                    <td colspan="2" style="font-size: 14pt; font-weight: bold; color: #111827; padding-top: 6px; padding-bottom: 4px;">
+                        {name}
+                    </td>
+                </tr>
+                
+                <!-- Price -->
+                <tr>
+                    <td colspan="2" align="right" style="border-bottom: 2px solid #F1F5F9; padding-bottom: 6px;">
+                        <span style="font-size: 10pt; color: #64748B; font-weight: bold; margin-right: 8px;">판매가</span>
+                        <span style="font-size: 22pt; font-weight: bold; color: #0F172A;">{price:,}</span>
+                        <span style="font-size: 13pt; font-weight: bold; color: #0F172A;">원</span>
+                    </td>
+                </tr>
+                
+                <!-- Benefit Calculation -->
+                {calc_html}
+                
+                <!-- Barcode -->
+                <tr>
+                    <td colspan="2" align="center" style="padding-top: 8px;">
+                        <img src="{barcode_img}" height="38" /><br>
+                        <span style="font-size: 9pt; color: #475569; font-weight: bold; letter-spacing: 2px;">{spaced_barcode}</span>
+                    </td>
+                </tr>
+            </table>
+            
+            <div style="text-align: center; color: #94A3B8; font-size: 8pt; margin: 6px 0 12px 0;">
+                - - - - - - - - - - - - - - - ✂ 절취선 - - - - - - - - - - - - - - -
+            </div>
+            '''
+            cards_html += card
+            
+        html = f'''
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <title>{title}</title>
+            <style>
+                body {{
+                    margin: 0;
+                    padding: 8px;
+                    background-color: #F8FAFC;
+                    font-family: 'Malgun Gothic', 'Dotum', sans-serif;
+                }}
+            </style>
+        </head>
+        <body>
+            <div style="text-align: center; margin-bottom: 8px;">
+                <span style="font-size: 11pt; font-weight: bold; color: #334155;">🏷️ {title} (총 {len(products_list)}건)</span>
+            </div>
+            {cards_html}
+        </body>
+        </html>
+        '''
+        return html
+
+    def get_selected_product_info(self):
+        barcode = ""
+        current_row = self.table.currentRow()
+        if current_row >= 0:
+            item = self.table.item(current_row, 0)
+            if item:
+                barcode = item.text().strip()
+        if not barcode and hasattr(self, 'input_barcode'):
+            barcode = self.input_barcode.text().strip()
+            
+        if barcode:
+            p = self.product_manager.get_product(barcode)
+            if p:
+                return {
+                    "barcode": barcode,
+                    "name": p.get("name", ""),
+                    "price": p.get("price", 0),
+                    "category": p.get("category", "일반"),
+                    "promo_type": p.get("promo_type", 0)
+                }
+        return None
+
+    def print_selected_pop(self):
+        p = self.get_selected_product_info()
+        if not p:
+            self.show_alert("경고", "진열대 가격표(POP)를 출력할 상품을 목록에서 선택해주세요.", 'warning')
+            return
+            
+        html = self.generate_pop_label_html([p], title=f"{p['name']} 진열대 가격표(POP)")
+        from ui_components import ReceiptPreviewDialog
+        dialog = ReceiptPreviewDialog(html, self, title="선택 상품 진열대 가격표(POP)", height=780)
+        dialog.exec()
+
+    def print_promo_pop(self):
+        products = self.product_manager.get_all_products()
+        promo_items = []
+        for barcode, data in products.items():
+            ptype = data.get("promo_type", 0)
+            if ptype in (1, 2):
+                promo_items.append({
+                    "barcode": barcode,
+                    "name": data.get("name", ""),
+                    "price": data.get("price", 0),
+                    "category": data.get("category", "일반"),
+                    "promo_type": ptype
+                })
+                
+        if not promo_items:
+            self.show_alert("알림", "등록된 행사 상품(1+1 또는 2+1)이 없습니다.", 'info')
+            return
+            
+        html = self.generate_pop_label_html(promo_items, title="행사상품(1+1/2+1) 진열대 가격표(POP)")
+        from ui_components import ReceiptPreviewDialog
+        dialog = ReceiptPreviewDialog(html, self, title="행사상품(1+1/2+1) 진열대 가격표(POP)", height=780)
+        dialog.exec()
+
+    def print_all_pop(self):
+        products = self.product_manager.get_all_products()
+        if not products:
+            self.show_alert("알림", "등록된 상품이 없습니다.", 'info')
+            return
+            
+        all_items = []
+        for barcode, data in products.items():
+            all_items.append({
+                "barcode": barcode,
+                "name": data.get("name", ""),
+                "price": data.get("price", 0),
+                "category": data.get("category", "일반"),
+                "promo_type": data.get("promo_type", 0)
+            })
+            
+        html = self.generate_pop_label_html(all_items, title="전체 진열대 가격표(POP)")
+        from ui_components import ReceiptPreviewDialog
+        dialog = ReceiptPreviewDialog(html, self, title="전체 진열대 가격표(POP)", height=780)
         dialog.exec()
 
     def select_product_image(self):
