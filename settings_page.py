@@ -2660,12 +2660,41 @@ class SettingsPage(QWidget):
         self.btn_v_add.clicked.connect(self.save_voucher)
         btn_panel.addWidget(self.btn_v_add)
         
+        action_btn_layout = QHBoxLayout()
+        action_btn_layout.setSpacing(6)
+
         self.btn_v_print = QPushButton("상품권 이미지 보기")
         self.btn_v_print.setStyleSheet(MODERN_BTN_PURPLE)
         self.btn_v_print.setFixedHeight(styles.s(36))
         self.btn_v_print.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_v_print.clicked.connect(self.print_voucher_image)
-        btn_panel.addWidget(self.btn_v_print)
+        action_btn_layout.addWidget(self.btn_v_print)
+
+        MODERN_BTN_COCOA = f"""
+            QPushButton {{
+                background-color: #FEE500;
+                color: #3C1E1E;
+                border: none;
+                border-radius: {styles.s(8)}px;
+                font-family: '{styles.FONT_FAMILY}';
+                font-size: {styles.fs(13)};
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: #FADA0A;
+            }}
+            QPushButton:pressed {{
+                background-color: #E6C800;
+            }}
+        """
+        self.btn_v_cocoa = QPushButton("☕ 코코아톡 전송")
+        self.btn_v_cocoa.setStyleSheet(MODERN_BTN_COCOA)
+        self.btn_v_cocoa.setFixedHeight(styles.s(36))
+        self.btn_v_cocoa.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_v_cocoa.clicked.connect(self.send_voucher_cocoatalk)
+        action_btn_layout.addWidget(self.btn_v_cocoa)
+
+        btn_panel.addLayout(action_btn_layout)
         
         manage_btn_layout = QHBoxLayout()
         manage_btn_layout.setSpacing(6)
@@ -3070,6 +3099,28 @@ class SettingsPage(QWidget):
         # 5. Open dialog using ReceiptPreviewDialog with a custom title
         from ui_components import ReceiptPreviewDialog
         dialog = ReceiptPreviewDialog(html, self, title="모바일 상품권 확인", height=780)
+        dialog.exec()
+
+    def send_voucher_cocoatalk(self):
+        barcode = self.v_input_barcode.text().strip()
+        if not barcode or barcode == "9900000000":
+            current_row = self.v_table.currentRow()
+            if current_row >= 0:
+                barcode = self.v_table.item(current_row, 0).text()
+            else:
+                self.show_alert("경고", "코코아톡으로 전송할 상품권을 선택하거나 정보를 입력해주세요.", 'warning')
+                return
+
+        voucher = self.product_manager.get_voucher(barcode)
+        if not voucher:
+            self.show_alert("경고", "저장된 상품권 정보를 찾을 수 없습니다.\n먼저 상품권을 저장해주세요.", 'warning')
+            return
+
+        target_barcode = voucher.get("product_barcode", "")
+        target_product = self.product_manager.get_product(target_barcode)
+
+        from cocoatalk_sender import CocoaTalkVoucherDialog
+        dialog = CocoaTalkVoucherDialog(barcode, voucher, target_product, self.receipt_manager, self)
         dialog.exec()
 
     def set_fullscreen(self):
