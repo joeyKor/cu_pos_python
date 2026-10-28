@@ -2383,8 +2383,8 @@ class SettingsPage(QWidget):
         v_left_layout.addLayout(header_row)
         
         self.v_table = QTableWidget()
-        self.v_table.setColumnCount(5)
-        self.v_table.setHorizontalHeaderLabels(["상품권 바코드", "상품권 이름", "교환 대상 상품", "가격", "상태"])
+        self.v_table.setColumnCount(6)
+        self.v_table.setHorizontalHeaderLabels(["상품권 바코드", "상품권 이름", "유형", "교환 대상 상품", "잔액 / 액면가", "상태"])
         
         SETTINGS_TABLE_STYLE = f"""
             QTableWidget {{
@@ -2424,11 +2424,12 @@ class SettingsPage(QWidget):
         header = self.v_table.horizontalHeader()
         header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         header.setMinimumHeight(styles.s(45))
-        self.v_table.setColumnWidth(0, styles.s(140)) # Barcode
-        self.v_table.setColumnWidth(1, styles.s(170)) # Name
-        self.v_table.setColumnWidth(2, styles.s(170)) # Target
-        self.v_table.setColumnWidth(3, styles.s(80))  # Price
-        self.v_table.setColumnWidth(4, styles.s(80))  # Status
+        self.v_table.setColumnWidth(0, styles.s(130)) # Barcode
+        self.v_table.setColumnWidth(1, styles.s(160)) # Name
+        self.v_table.setColumnWidth(2, styles.s(85))  # Type
+        self.v_table.setColumnWidth(3, styles.s(130)) # Target
+        self.v_table.setColumnWidth(4, styles.s(110)) # Balance / Price
+        self.v_table.setColumnWidth(5, styles.s(75))  # Status
         
         self.v_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.v_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -2583,6 +2584,32 @@ class SettingsPage(QWidget):
         form_layout.setSpacing(styles.s(10))
         form_layout.setContentsMargins(0, 0, 5, 0)
         
+        # Row 0: Voucher Type Selection (물품 교환권 vs 금액형 상품권)
+        type_box = QVBoxLayout()
+        type_box.setSpacing(styles.s(6))
+        lbl_type = QLabel("상품권 유형 선택")
+        lbl_type.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR};")
+        type_box.addWidget(lbl_type)
+        
+        type_btn_layout = QHBoxLayout()
+        type_btn_layout.setSpacing(styles.s(8))
+        
+        self.btn_v_type_item = QPushButton("🏷️  물품 교환권")
+        self.btn_v_type_amount = QPushButton("💳  금액형 상품권")
+        
+        self.btn_v_type_item.setFixedHeight(styles.s(44))
+        self.btn_v_type_amount.setFixedHeight(styles.s(44))
+        self.btn_v_type_item.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_v_type_amount.setCursor(Qt.CursorShape.PointingHandCursor)
+        
+        self.btn_v_type_item.clicked.connect(lambda: self.switch_voucher_type("item", reset_fields=True))
+        self.btn_v_type_amount.clicked.connect(lambda: self.switch_voucher_type("amount", reset_fields=True))
+        
+        type_btn_layout.addWidget(self.btn_v_type_item)
+        type_btn_layout.addWidget(self.btn_v_type_amount)
+        type_box.addLayout(type_btn_layout)
+        form_layout.addLayout(type_box)
+        
         # Voucher Barcode
         barcode_header_layout = QHBoxLayout()
         lbl_barcode = QLabel("상품권 바코드 (13자리)")
@@ -2595,16 +2622,49 @@ class SettingsPage(QWidget):
         
         self.v_input_barcode = QLineEdit()
         self.v_input_barcode.setReadOnly(True)
-        self.v_input_barcode.setPlaceholderText("교환 대상 상품 선택 시 자동으로 생성됩니다")
+        self.v_input_barcode.setPlaceholderText("상품권 생성 시 자동으로 부여됩니다")
         self.v_input_barcode.setStyleSheet(MODERN_INPUT_STYLE.replace("#F9FAFB", "#F3F4F6"))
         self.v_input_barcode.textChanged.connect(self.update_v_barcode_counter)
         
-        # Target Product Dropdown
-        lbl_target = QLabel("교환 대상 상품")
-        lbl_target.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR}; margin-top: {styles.s(5)}px;")
+        # Target Product Dropdown (물품 교환권용)
+        self.lbl_v_target = QLabel("교환 대상 상품")
+        self.lbl_v_target.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold; color: {styles.TEXT_COLOR}; margin-top: {styles.s(5)}px;")
         self.v_combo_target_prod = QComboBox()
         self.v_combo_target_prod.setStyleSheet(MODERN_COMBO_STYLE)
         self.v_combo_target_prod.currentIndexChanged.connect(self.on_target_product_changed)
+        
+        # Quick Amount Buttons (금액형 상품권용)
+        self.v_quick_amt_widget = QWidget()
+        quick_amt_layout = QVBoxLayout(self.v_quick_amt_widget)
+        quick_amt_layout.setContentsMargins(0, 0, 0, 0)
+        quick_amt_layout.setSpacing(4)
+        lbl_quick_hint = QLabel("빠른 금액 선택")
+        lbl_quick_hint.setStyleSheet(f"font-size: {styles.FONT_SIZE_SMALL}; color: #6B7280; font-weight: bold;")
+        quick_amt_layout.addWidget(lbl_quick_hint)
+        
+        btn_amt_row = QHBoxLayout()
+        btn_amt_row.setSpacing(6)
+        for amt in [3000, 5000, 10000, 30000, 50000]:
+            btn = QPushButton(f"{amt:,}원")
+            btn.setFixedHeight(styles.s(32))
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background-color: #EEF2FF;
+                    border: 1px solid #C7D2FE;
+                    color: #4338CA;
+                    font-size: 10pt;
+                    font-weight: bold;
+                    border-radius: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #E0E7FF;
+                }
+            """)
+            btn.clicked.connect(lambda checked, a=amt: self.set_quick_amount(a))
+            btn_amt_row.addWidget(btn)
+        quick_amt_layout.addLayout(btn_amt_row)
+        self.v_quick_amt_widget.hide() # Hidden by default (item exchange checked)
         
         # Voucher Name
         lbl_name = QLabel("상품권 이름")
@@ -2618,13 +2678,14 @@ class SettingsPage(QWidget):
         lbl_price.setStyleSheet(f"font-size: {styles.FONT_SIZE_MEDIUM}; color: {styles.TEXT_COLOR}; font-weight: bold;")
         self.v_input_price = QLineEdit()
         self.v_input_price.setStyleSheet(MODERN_INPUT_STYLE)
-        self.v_input_price.setPlaceholderText("예: 3,000")
+        self.v_input_price.setPlaceholderText("예: 5,000")
         
         form_layout.addLayout(barcode_header_layout)
         form_layout.addWidget(self.v_input_barcode)
         
-        form_layout.addWidget(lbl_target)
+        form_layout.addWidget(self.lbl_v_target)
         form_layout.addWidget(self.v_combo_target_prod)
+        form_layout.addWidget(self.v_quick_amt_widget)
         
         # Row 3: Name & Price Side-by-Side
         name_price_layout = QHBoxLayout()
@@ -2716,6 +2777,97 @@ class SettingsPage(QWidget):
         btn_panel.addLayout(manage_btn_layout)
         
         v_right_layout.addLayout(btn_panel)
+        
+        # Initialize default type UI
+        self.current_v_type = "item"
+        self.switch_voucher_type("item", reset_fields=False)
+
+    def switch_voucher_type(self, v_type, reset_fields=True):
+        """상품권 유형(물품 교환권 vs 금액형 상품권) 전환 및 UI/필드 갱신"""
+        self.current_v_type = v_type
+        
+        # 눈에 확 띄는 버튼 스타일 (활성: 선명한 브랜드 컬러 + 흰색 볼드 텍스트 / 비활성: 부드러운 회색 + 테두리)
+        active_item_style = (
+            "QPushButton {"
+            "  background-color: #7C3AED;"
+            "  color: #FFFFFF;"
+            f"  font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold;"
+            f"  border-radius: {styles.s(8)}px;"
+            "  border: 2px solid #5B21B6;"
+            "  padding: 6px 12px;"
+            "}"
+            "QPushButton:hover { background-color: #6D28D9; }"
+        )
+        inactive_item_style = (
+            "QPushButton {"
+            "  background-color: #F3F4F6;"
+            "  color: #4B5563;"
+            f"  font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: 600;"
+            f"  border-radius: {styles.s(8)}px;"
+            "  border: 1.5px solid #D1D5DB;"
+            "  padding: 6px 12px;"
+            "}"
+            "QPushButton:hover { background-color: #EDE9FE; color: #7C3AED; border-color: #C4B5FD; }"
+        )
+        
+        active_amount_style = (
+            "QPushButton {"
+            "  background-color: #2563EB;"
+            "  color: #FFFFFF;"
+            f"  font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: bold;"
+            f"  border-radius: {styles.s(8)}px;"
+            "  border: 2px solid #1D4ED8;"
+            "  padding: 6px 12px;"
+            "}"
+            "QPushButton:hover { background-color: #1D4ED8; }"
+        )
+        inactive_amount_style = (
+            "QPushButton {"
+            "  background-color: #F3F4F6;"
+            "  color: #4B5563;"
+            f"  font-size: {styles.FONT_SIZE_MEDIUM}; font-weight: 600;"
+            f"  border-radius: {styles.s(8)}px;"
+            "  border: 1.5px solid #D1D5DB;"
+            "  padding: 6px 12px;"
+            "}"
+            "QPushButton:hover { background-color: #DBEAFE; color: #2563EB; border-color: #93C5FD; }"
+        )
+        
+        if v_type == "item":
+            self.btn_v_type_item.setStyleSheet(active_item_style)
+            self.btn_v_type_amount.setStyleSheet(inactive_amount_style)
+            self.lbl_v_target.setVisible(True)
+            self.v_combo_target_prod.setVisible(True)
+            self.v_quick_amt_widget.setVisible(False)
+        else:
+            self.btn_v_type_item.setStyleSheet(inactive_item_style)
+            self.btn_v_type_amount.setStyleSheet(active_amount_style)
+            self.lbl_v_target.setVisible(False)
+            self.v_combo_target_prod.setVisible(False)
+            self.v_quick_amt_widget.setVisible(True)
+            
+        if reset_fields:
+            self.current_editing_v_barcode = None
+            self.v_input_name.clear()
+            self.v_input_price.clear()
+            self.v_combo_target_prod.setCurrentIndex(0)
+            self.v_input_barcode.clear()
+            self.update_v_barcode_counter()
+            self.v_table.clearSelection()
+
+    def set_quick_amount(self, amt):
+        self.v_input_price.setText(str(amt))
+        self.v_input_name.setText(f"모바일)금액권 {amt:,}원")
+        if not self.current_editing_v_barcode:
+            import random
+            existing_vouchers = self.product_manager.get_all_vouchers()
+            while True:
+                rand_part = "".join([str(random.randint(0, 9)) for _ in range(11)])
+                barcode = f"99{rand_part}"
+                if barcode not in existing_vouchers:
+                    break
+            self.v_input_barcode.setText(barcode)
+            self.update_v_barcode_counter()
 
     def populate_target_products(self):
         self.v_combo_target_prod.blockSignals(True)
@@ -2728,6 +2880,8 @@ class SettingsPage(QWidget):
         self.v_combo_target_prod.blockSignals(False)
 
     def on_target_product_changed(self, index):
+        if getattr(self, "current_v_type", "item") != "item":
+            return
         barcode = self.v_combo_target_prod.currentData()
         if barcode:
             product = self.product_manager.get_product(barcode)
@@ -2758,28 +2912,52 @@ class SettingsPage(QWidget):
         row = 0
         for barcode, data in vouchers.items():
             self.v_table.setItem(row, 0, QTableWidgetItem(barcode))
-            self.v_table.setItem(row, 1, QTableWidgetItem(data["name"]))
+            self.v_table.setItem(row, 1, QTableWidgetItem(data.get("name", "상품권")))
             
-            target_barcode = data["product_barcode"]
-            target_product = self.product_manager.get_product(target_barcode)
-            target_name = target_product["name"] if target_product else f"미기록 ({target_barcode})"
+            v_type = data.get("voucher_type", "item" if data.get("product_barcode") else "amount")
+            v_type_str = "물품교환" if v_type == "item" else "금액권"
+            self.v_table.setItem(row, 2, QTableWidgetItem(v_type_str))
             
+            target_barcode = data.get("product_barcode", "")
+            if v_type == "item" and target_barcode:
+                target_product = self.product_manager.get_product(target_barcode)
+                target_name = target_product["name"] if target_product else f"미기록 ({target_barcode})"
+            else:
+                target_name = "-"
+            self.v_table.setItem(row, 3, QTableWidgetItem(target_name))
+            
+            price = data.get("price", 0)
+            balance = data.get("balance", price)
             status = data.get("status", "unused")
-            status_text = "사용완료" if status == "used" else "미사용"
             
-            self.v_table.setItem(row, 2, QTableWidgetItem(target_name))
-            self.v_table.setItem(row, 3, QTableWidgetItem(f"{data['price']:,}"))
-            self.v_table.setItem(row, 4, QTableWidgetItem(status_text))
+            if status == "used" or balance <= 0:
+                status_text = "사용완료"
+            elif balance < price:
+                status_text = "잔액남음"
+            else:
+                status_text = "미사용"
+                
+            val_text = f"{balance:,} / {price:,}" if v_type == "amount" else f"{price:,}"
+            self.v_table.setItem(row, 4, QTableWidgetItem(val_text))
+            self.v_table.setItem(row, 5, QTableWidgetItem(status_text))
             
             self.v_table.item(row, 0).setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
-            self.v_table.item(row, 3).setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-            self.v_table.item(row, 4).setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+            self.v_table.item(row, 2).setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
+            self.v_table.item(row, 4).setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self.v_table.item(row, 5).setTextAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignVCenter)
             
-            # Apply styling colors for status
-            if status == "used":
-                self.v_table.item(row, 4).setForeground(QColor("#D32F2F")) # Red
+            # Apply styling colors for type and status
+            if v_type == "amount":
+                self.v_table.item(row, 2).setForeground(QColor("#1D4ED8")) # Indigo/Blue
             else:
-                self.v_table.item(row, 4).setForeground(QColor("#388E3C")) # Green
+                self.v_table.item(row, 2).setForeground(QColor("#7C3AED")) # Purple
+                
+            if status_text == "사용완료":
+                self.v_table.item(row, 5).setForeground(QColor("#D32F2F")) # Red
+            elif status_text == "잔액남음":
+                self.v_table.item(row, 5).setForeground(QColor("#0284C7")) # Sky Blue
+            else:
+                self.v_table.item(row, 5).setForeground(QColor("#388E3C")) # Green
             
             row += 1
 
@@ -2794,10 +2972,13 @@ class SettingsPage(QWidget):
             self.v_input_name.setText(voucher["name"])
             self.v_input_price.setText(str(voucher["price"]))
             
-            target_bc = voucher["product_barcode"]
-            idx = self.v_combo_target_prod.findData(target_bc)
-            if idx >= 0:
-                self.v_combo_target_prod.setCurrentIndex(idx)
+            v_type = voucher.get("voucher_type", "item" if voucher.get("product_barcode") else "amount")
+            self.switch_voucher_type(v_type, reset_fields=False)
+            if v_type == "item":
+                target_bc = voucher.get("product_barcode", "")
+                idx = self.v_combo_target_prod.findData(target_bc)
+                if idx >= 0:
+                    self.v_combo_target_prod.setCurrentIndex(idx)
 
     def filter_vouchers(self):
         search_text = self.v_input_search.text().strip().lower()
@@ -2822,24 +3003,30 @@ class SettingsPage(QWidget):
             self.v_lbl_barcode_counter.setStyleSheet(f"font-size: {styles.FONT_SIZE_SMALL}; color: {styles.PRIMARY_PURPLE}; font-weight: bold;")
 
     def clear_v_form(self):
-        self.current_editing_v_barcode = None
-        self.v_input_barcode.setText("9900000000")
-        self.v_input_barcode.setFocus()
-        self.v_input_barcode.setCursorPosition(10)
-        self.v_combo_target_prod.setCurrentIndex(0)
-        self.v_input_name.clear()
-        self.v_input_price.clear()
-        self.v_table.clearSelection()
-        self.update_v_barcode_counter()
+        self.switch_voucher_type("item", reset_fields=True)
 
     def save_voucher(self):
         barcode = self.v_input_barcode.text().strip()
         name = self.v_input_name.text().strip()
         price_str = self.v_input_price.text().strip()
-        target_barcode = self.v_combo_target_prod.currentData()
+        is_item = (getattr(self, "current_v_type", "item") == "item")
+        v_type = self.current_v_type
+        target_barcode = self.v_combo_target_prod.currentData() if is_item else ""
         
-        if not name or not price_str or not target_barcode:
-            self.show_alert("경고", "교환 대상 상품과 상품권 이름을 채워주세요.", 'warning')
+        if is_item and not target_barcode:
+            self.show_alert("경고", "교환 대상 상품을 선택해주세요.", 'warning')
+            return
+            
+        if not name or not price_str:
+            self.show_alert("경고", "상품권 이름과 금액을 입력해주세요.", 'warning')
+            return
+            
+        try:
+            price = int(price_str.replace(",", ""))
+            if price <= 0:
+                raise ValueError
+        except ValueError:
+            self.show_alert("경고", "금액은 0보다 큰 숫자여야 합니다.", 'warning')
             return
             
         # Auto generate barcode if empty, default prefix, or invalid
@@ -2852,17 +3039,19 @@ class SettingsPage(QWidget):
                 if barcode not in existing_vouchers:
                     break
             
-        try:
-            price = int(price_str.replace(",", ""))
-        except ValueError:
-            self.show_alert("경고", "금액은 숫자여야 합니다.", 'warning')
-            return
-            
         # Save
-        self.product_manager.add_voucher(barcode, target_barcode, name, price)
+        self.product_manager.add_voucher(
+            barcode=barcode,
+            product_barcode=target_barcode,
+            name=name,
+            price=price,
+            status="unused",
+            voucher_type=v_type,
+            balance=price
+        )
         self.load_voucher_data()
         self.clear_v_form()
-        self.show_alert("완료", f"상품권 정보가 저장되었습니다.\n바코드: {barcode}", 'info')
+        self.show_alert("완료", f"[{'물품교환권' if is_item else '금액형상품권'}] 저장되었습니다.\n바코드: {barcode}", 'info')
 
     def delete_voucher(self):
         current_row = self.v_table.currentRow()
@@ -2976,7 +3165,7 @@ class SettingsPage(QWidget):
                     padding: 10px;
                 }}
                 .card-container {{
-                    width: 320px;
+                    width: 350px;
                     background-color: #ffffff;
                     border: 1px solid #E0E0E0;
                     border-radius: 12px;
@@ -2997,7 +3186,7 @@ class SettingsPage(QWidget):
                     margin: 0 auto;
                 }}
                 .card-body {{
-                    padding: 20px;
+                    padding: 20px 15px;
                     text-align: center;
                     background-color: #FAFAFA;
                     border-bottom-left-radius: 11px;
@@ -3018,7 +3207,7 @@ class SettingsPage(QWidget):
                     line-height: 1.3;
                 }}
                 .pay-banner {{
-                    width: 85%;
+                    width: 90%;
                     border-top: 1px solid #E0E0E0;
                     border-bottom: 1px solid #E0E0E0;
                     margin: 10px auto 20px auto;
@@ -3033,11 +3222,14 @@ class SettingsPage(QWidget):
                 }}
                 .barcode-box {{
                     background-color: #ffffff;
-                    border: 1px solid #EBEBEB;
-                    border-radius: 6px;
-                    padding: 12px 10px;
-                    display: inline-block;
-                    margin-bottom: 10px;
+                    border: 1.5px solid #E2E8F0;
+                    border-radius: 8px;
+                    padding: 14px 10px;
+                    display: block;
+                    width: 92%;
+                    margin: 0 auto 12px auto;
+                    box-sizing: border-box;
+                    text-align: center;
                 }}
                 .barcode-number-row {{
                     margin-top: 5px;
@@ -3083,7 +3275,7 @@ class SettingsPage(QWidget):
                     </div>
                     
                     <div class="barcode-box">
-                        <img src="{barcode_img_src}" width="220" height="60" />
+                        <img src="{barcode_img_src}" style="width: 100%; max-width: 295px; height: 80px; display: block; margin: 0 auto;" />
                     </div>
                     
                     <div class="barcode-number-row">

@@ -94,6 +94,7 @@ class EditItemDialog(QDialog):
         self.delete_clicked = False
         self.current_qty = current_qty
         self.input_qty_str = str(current_qty)
+        self.is_first_input = True
         
         self.init_ui()
         
@@ -336,19 +337,36 @@ class EditItemDialog(QDialog):
         main_layout.addWidget(right_panel, stretch=45)
         
     def key_pressed(self, num_char):
-        if self.input_qty_str == "0" or self.input_qty_str == "1" and len(self.input_qty_str) == 1:
+        if self.is_first_input:
             self.input_qty_str = num_char
+            self.is_first_input = False
         else:
-            if len(self.input_qty_str) < 3: # Limit to 3 digits (up to 999)
+            if self.input_qty_str == "0":
+                self.input_qty_str = num_char
+            elif len(self.input_qty_str) < 3: # Limit to 3 digits (up to 999)
                 self.input_qty_str += num_char
         self.update_display()
         
     def backspace_pressed(self):
+        self.is_first_input = False
         if len(self.input_qty_str) > 1:
             self.input_qty_str = self.input_qty_str[:-1]
         else:
-            self.input_qty_str = "1"
+            self.input_qty_str = "0"
         self.update_display()
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        if Qt.Key.Key_0 <= key <= Qt.Key.Key_9:
+            self.key_pressed(chr(key))
+        elif key in (Qt.Key.Key_Backspace, Qt.Key.Key_Delete):
+            self.backspace_pressed()
+        elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self.apply_qty()
+        elif key == Qt.Key.Key_Escape:
+            self.reject()
+        else:
+            super().keyPressEvent(event)
         
     def update_display(self):
         self.lbl_qty_display.setText(self.input_qty_str)

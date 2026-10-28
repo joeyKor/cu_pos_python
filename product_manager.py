@@ -34,8 +34,10 @@ DATA_FILE = os.path.join("json", "products.json")
 VOUCHER_FILE = os.path.join("json", "vouchers.json")
 
 DEFAULT_VOUCHERS = {
-    "9900012345678": {"product_barcode": "8801111900027", "name": "모바일)새우깡교환권", "price": 1900},
-    "9900012345679": {"product_barcode": "8801111900102", "name": "모바일)콜라교환권", "price": 1600}
+    "9900012345678": {"voucher_type": "item", "product_barcode": "8801111900027", "name": "모바일)새우깡교환권", "price": 1900, "balance": 1900, "status": "unused"},
+    "9900012345679": {"voucher_type": "item", "product_barcode": "8801111900102", "name": "모바일)콜라교환권", "price": 1600, "balance": 1600, "status": "unused"},
+    "9900012345680": {"voucher_type": "amount", "product_barcode": "", "name": "모바일)금액권 5,000원", "price": 5000, "balance": 5000, "status": "unused"},
+    "9900012345681": {"voucher_type": "amount", "product_barcode": "", "name": "모바일)금액권 10,000원", "price": 10000, "balance": 10000, "status": "unused"}
 }
 
 class ProductManager:
@@ -148,6 +150,24 @@ class ProductManager:
             except (json.JSONDecodeError, IOError):
                 self.vouchers = DEFAULT_VOUCHERS.copy()
                 self.save_vouchers()
+                
+        # Ensure schema integrity for hybrid vouchers
+        updated = False
+        for bc, v in self.vouchers.items():
+            if "voucher_type" not in v:
+                v["voucher_type"] = "item" if v.get("product_barcode") else "amount"
+                updated = True
+            if "balance" not in v:
+                if v.get("status") == "used":
+                    v["balance"] = 0
+                else:
+                    v["balance"] = v.get("price", 0)
+                updated = True
+            if "status" not in v:
+                v["status"] = "unused"
+                updated = True
+        if updated:
+            self.save_vouchers()
 
     def save_vouchers(self):
         try:
@@ -162,30 +182,74 @@ class ProductManager:
     def get_all_vouchers(self):
         return self.vouchers
 
-    def add_voucher(self, barcode, product_barcode, name, price, status="unused"):
-        self.vouchers[barcode] = {"product_barcode": product_barcode, "name": name, "price": price, "status": status}
+    def add_voucher(self, barcode, product_barcode, name, price, status="unused", voucher_type="item", balance=None):
+        if balance is None:
+            balance = price if status != "used" else 0
+        self.vouchers[barcode] = {
+            "voucher_type": voucher_type,
+            "product_barcode": product_barcode if voucher_type == "item" else "",
+            "name": name,
+            "price": price,
+            "balance": balance,
+            "status": status
+        }
         self.save_vouchers()
 
-    def update_voucher(self, barcode, product_barcode, name, price, status="unused"):
+    def update_voucher(self, barcode, product_barcode, name, price, status="unused", voucher_type="item", balance=None):
         if barcode in self.vouchers:
-            self.vouchers[barcode] = {"product_barcode": product_barcode, "name": name, "price": price, "status": status}
+            if balance is None:
+                old_v = self.vouchers[barcode]
+                if old_v.get("price") == price and "balance" in old_v:
+                    balance = old_v["balance"]
+                else:
+                    balance = price if status != "used" else 0
+            self.vouchers[barcode] = {
+                "voucher_type": voucher_type,
+                "product_barcode": product_barcode if voucher_type == "item" else "",
+                "name": name,
+                "price": price,
+                "balance": balance,
+                "status": status
+            }
             self.save_vouchers()
 
-    def update_voucher_key(self, old_barcode, new_barcode, product_barcode, name, price, status="unused"):
+    def update_voucher_key(self, old_barcode, new_barcode, product_barcode, name, price, status="unused", voucher_type="item", balance=None):
         if old_barcode not in self.vouchers:
             return False
+        if balance is None:
+            balance = price if status != "used" else 0
         new_vouchers = {}
         for key, value in self.vouchers.items():
             if key == old_barcode:
-                new_vouchers[new_barcode] = {"product_barcode": product_barcode, "name": name, "price": price, "status": status}
+                new_vouchers[new_barcode] = {
+                    "voucher_type": voucher_type,
+                    "product_barcode": product_barcode if voucher_type == "item" else "",
+                    "name": name,
+                    "price": price,
+                    "balance": balance,
+                    "status": status
+                }
             else:
                 new_vouchers[key] = value
         self.vouchers = new_vouchers
         self.save_vouchers()
         return True
 
+    def deduct_voucher_balance(self, barcode, amount):
+        if barcode in self.vouchers:
+            v = self.vouchers[barcode]
+            curr_bal = v.get("balance", v.get("price", 0))
+            new_bal = max(0, curr_bal - amount)
+            v["balance"] = new_bal
+            if new_bal <= 0:
+                v["status"] = "used"
+            self.save_vouchers()
+            return new_bal
+        return None
+
     def mark_voucher_used(self, barcode):
         if barcode in self.vouchers:
+            self.vouchers[barcode]["balance"] = 0
             self.vouchers[barcode]["status"] = "used"
             self.save_vouchers()
             return True

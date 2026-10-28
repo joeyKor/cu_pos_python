@@ -67,16 +67,21 @@ class ReceiptManager:
             from io import BytesIO
             import base64
             
+            clean_text = str(text).strip()
             # Use Code 128 for a real, scannable barcode
-            code128 = barcode.get('code128', text, writer=ImageWriter())
+            code128 = barcode.get('code128', clean_text, writer=ImageWriter())
             
-            # Customize writer options for a clean look
+            # 모니터 화면 및 바코드 스캐너의 초고속 인식을 위한 최적 옵션:
+            # - module_width: 0.35mm (픽셀 뭉개짐 방지)
+            # - module_height: 15.0mm (스캐너 높이 감지율 대폭 향상)
+            # - quiet_zone: 6.5mm (시작 코드 99 누락 방지를 위한 충분한 좌우 여백)
             options = {
-                'module_height': 5.0,
-                'module_width': 0.2,
-                'quiet_zone': 3.0,
-                'font_size': 0,      # Hide the text as it's displayed separately in HTML
+                'module_height': 15.0,
+                'module_width': 0.35,
+                'quiet_zone': 6.5,
+                'font_size': 0,
                 'text_distance': 0,
+                'write_text': False
             }
             
             fp = BytesIO()
@@ -197,15 +202,17 @@ class ReceiptManager:
             elif method == "MobileVoucher":
                 prod_name = details.get("product_name", "모바일상품권")
                 coupon_code = p.get("details", {}).get("barcode", p.get("barcode", "9900000000000"))
+                v_type = details.get("voucher_type", "item")
                 if len(coupon_code) == 13:
                     coupon_code = f"{coupon_code[:4]}-{coupon_code[4:8]}-{coupon_code[8:]}"
+                title_str = "모바일 상품교환권" if v_type == "item" else "모바일 금액권"
                 payment_info_html += f"""
                 <tr>
-                    <td class="bold">모바일 상품권</td>
+                    <td class="bold">{title_str}</td>
                     <td colspan="2" class="col-amt bold">{amt:,}</td>
                 </tr>
-                <tr><td colspan="3" class="center">********* 모바일 상품권 *********</td></tr>
-                <tr><td colspan="3">상품명: {prod_name}</td></tr>
+                <tr><td colspan="3" class="center">********* {title_str} *********</td></tr>
+                <tr><td colspan="3">상품권명: {prod_name}</td></tr>
                 <tr><td colspan="3">쿠폰번호: {coupon_code}</td></tr>
                 """
             elif method == "KeepingCoupon":

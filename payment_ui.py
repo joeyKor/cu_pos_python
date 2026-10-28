@@ -1,7 +1,7 @@
 import os, sys
 from PyQt6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                              QPushButton, QFrame, QWidget, QLineEdit, QGridLayout,
-                             QGraphicsDropShadowEffect, QButtonGroup)
+                             QGraphicsDropShadowEffect, QButtonGroup, QRadioButton, QComboBox)
 from PyQt6.QtCore import Qt, QTimer, QUrl
 from PyQt6.QtGui import QColor
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -3154,6 +3154,12 @@ class PaymentSelectDialog(QDialog):
         
         # Update initially
         self.update_amounts()
+        
+        # 바코드 스캐너 직접 지원 (결제선택 창에서 바로 바코드 찍기)
+        self._barcode_buffer = ""
+        self._barcode_timer = QTimer(self)
+        self._barcode_timer.setSingleShot(True)
+        self._barcode_timer.timeout.connect(self._clear_barcode_buffer)
 
     def init_sidebar(self):
         layout = QVBoxLayout(self.sidebar)
@@ -3363,15 +3369,14 @@ class PaymentSelectDialog(QDialog):
         btn_credit_card = create_pay_btn("신용카드", self.trigger_card, is_main=True)
         btn_transit_card = create_pay_btn("교통카드", self.trigger_transit_card)
         btn_mobile = create_pay_btn("모바일", self.trigger_mobile)
-        btn_gift = create_pay_btn("상품권", lambda: self.trigger_simulated("상품권"))
+        self.btn_gift = create_pay_btn("상품권", self.trigger_gift)
         btn_school = create_pay_btn("급식카드/\n청소년바우처", lambda: self.trigger_simulated("급식카드/청소년바우처"))
         
         btn_ic_card = create_pay_btn("현금IC카드", lambda: self.trigger_simulated("현금IC카드"))
         btn_employee_pt = create_pay_btn("제휴사\n임직원포인트", lambda: self.trigger_simulated("제휴사 임직원포인트"))
         btn_bank = create_pay_btn("계좌이체", lambda: self.trigger_simulated("계좌이체"))
         
-        # Disable unsupported buttons
-        btn_gift.setEnabled(False)
+        # Disable unsupported buttons (상품권 btn_gift is now ENABLED!)
         btn_school.setEnabled(False)
         btn_ic_card.setEnabled(False)
         btn_employee_pt.setEnabled(False)
@@ -3383,7 +3388,7 @@ class PaymentSelectDialog(QDialog):
         grid_layout.addWidget(btn_mobile, 1, 1)
         grid_layout.addWidget(btn_ic_card, 2, 1)
         
-        grid_layout.addWidget(btn_gift, 1, 2)
+        grid_layout.addWidget(self.btn_gift, 1, 2)
         grid_layout.addWidget(btn_employee_pt, 2, 2)
         
         grid_layout.addWidget(btn_school, 1, 3)
@@ -3478,13 +3483,38 @@ class PaymentSelectDialog(QDialog):
 
     def update_amounts(self):
         total_amt, total_disc, final_amt = self.parent().get_cart_summary()
-        remaining = final_amt - self.parent().total_paid
+        m_disc = getattr(self.parent(), "membership_discount", 0)
+        v_disc = sum(p.get("amount", 0) for p in self.parent().payments if p.get("method") == "MobileVoucher")
+        net_final = max(0, final_amt - (m_disc + v_disc))
+        remaining = max(0, net_final - self.parent().total_paid)
         
-        self.lbl_sum_val.setText(f"{final_amt:,}")
+        total_paid_combined = self.parent().total_paid + v_disc
+        
+        self.lbl_sum_val.setText(f"{net_final:,}")
         self.lbl_total_val.setText(f"{final_amt:,} 원")
-        self.lbl_paid_val.setText(f"{self.parent().total_paid:,} 원")
-        self.lbl_rem_val.setText(f"{max(0, remaining):,}")
-        self.txt_cash_amt.setText(f"{max(0, remaining)}")
+        if v_disc > 0:
+            self.lbl_paid_val.setText(f"{total_paid_combined:,} 원 (상품권 {v_disc:,}원)")
+        else:
+            self.lbl_paid_val.setText(f"{total_paid_combined:,} 원")
+        self.lbl_rem_val.setText(f"{remaining:,}")
+        self.txt_cash_amt.setText(f"{remaining}")
+        
+        if hasattr(self, 'btn_gift'):
+            if v_disc > 0:
+                self.btn_gift.setText(f"✔️ 상품권\n({v_disc:,}원 적용)")
+                self.btn_gift.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: #EDE9FE;
+                        border: 2px solid {styles.PRIMARY_PURPLE};
+                        color: {styles.PRIMARY_PURPLE};
+                        font-size: 10.5pt;
+                        font-weight: bold;
+                        border-radius: 5px;
+                    }}
+                    QPushButton:hover {{ background-color: #DDD6FE; }}
+                """)
+            else:
+                self.btn_gift.setText("✔️ 상품권")
 
     def trigger_affiliate(self):
         self.parent().open_affiliate_discount()
@@ -3505,6 +3535,11 @@ class PaymentSelectDialog(QDialog):
         self.parent().open_mobile_payment()
         self.update_amounts()
         self.check_completion()
+
+    def trigger_gift(self):
+        self.parent().open_gift_voucher_payment()
+        self.update_amounts()
+        self.check_completion()
         
     def trigger_simulated(self, method_name):
         CustomMessageDialog("결제 제한", f"'{method_name}'은(는) 현재 단말기에서 지원하지 않는 결제 수단입니다.", 'warning', self).exec()
@@ -3519,7 +3554,10 @@ class PaymentSelectDialog(QDialog):
             return
             
         total_amt, total_disc, final_amt = self.parent().get_cart_summary()
-        remaining = final_amt - self.parent().total_paid
+        m_disc = getattr(self.parent(), "membership_discount", 0)
+        v_disc = sum(p.get("amount", 0) for p in self.parent().payments if p.get("method") == "MobileVoucher")
+        net_final = max(0, final_amt - (m_disc + v_disc))
+        remaining = max(0, net_final - self.parent().total_paid)
         if remaining <= 0:
             CustomMessageDialog("알림", "이미 결제가 완료되었습니다.", 'info', self).exec()
             return
@@ -3559,8 +3597,833 @@ class PaymentSelectDialog(QDialog):
         
     def check_completion(self):
         total_amt, total_disc, final_amt = self.parent().get_cart_summary()
-        if self.parent().total_paid >= final_amt or not self.parent().cart:
+        m_disc = getattr(self.parent(), "membership_discount", 0)
+        v_disc = sum(p.get("amount", 0) for p in self.parent().payments if p.get("method") == "MobileVoucher")
+        net_final = max(0, final_amt - (m_disc + v_disc))
+        if self.parent().total_paid >= net_final or not self.parent().cart:
             self.accept()
+
+    def _clear_barcode_buffer(self):
+        self._barcode_buffer = ""
+
+    def keyPressEvent(self, event):
+        key = event.key()
+        text = event.text()
+        
+        if key in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            bc = self._barcode_buffer.strip()
+            self._barcode_buffer = ""
+            if len(bc) >= 8:
+                self.handle_scanned_barcode(bc)
+                event.accept()
+                return
+        elif text and text.isdigit():
+            self._barcode_buffer += text
+            self._barcode_timer.start(250)
+            
+        if key == Qt.Key.Key_Escape:
+            self.reject()
+            return
+            
+        super().keyPressEvent(event)
+
+    def handle_scanned_barcode(self, barcode):
+        if not hasattr(self.parent(), 'product_manager'):
+            return
+        
+        # 스마트 접두사 보정 (모니터 스캔 특성상 앞자리 99가 잘려 11자리 등으로 들어왔을 때 자동 보정)
+        real_bc = barcode
+        voucher = self.parent().product_manager.get_voucher(real_bc)
+        if not voucher and len(real_bc) == 11:
+            prefixed = f"99{real_bc}"
+            v_cand = self.parent().product_manager.get_voucher(prefixed)
+            if v_cand:
+                real_bc = prefixed
+                voucher = v_cand
+        elif not voucher and len(real_bc) == 12:
+            prefixed = f"9{real_bc}"
+            v_cand = self.parent().product_manager.get_voucher(prefixed)
+            if v_cand:
+                real_bc = prefixed
+                voucher = v_cand
+                
+        if voucher:
+            total_amt, total_disc, final_amt = self.parent().get_cart_summary()
+            m_disc = getattr(self.parent(), "membership_discount", 0)
+            v_disc = sum(p.get("amount", 0) for p in self.parent().payments if p.get("method") == "MobileVoucher")
+            net_final = max(0, final_amt - (m_disc + v_disc))
+            remaining = max(0, net_final - self.parent().total_paid)
+            
+            if remaining <= 0:
+                CustomMessageDialog("알림", "이미 결제 금액이 모두 충족되었습니다.", 'info', self).exec()
+                return
+                
+            confirm_dlg = VoucherConfirmDialog(
+                voucher_data=voucher,
+                barcode=real_bc,
+                remaining_due=remaining,
+                cart=self.parent().cart,
+                product_manager=self.parent().product_manager,
+                parent=self
+            )
+            if confirm_dlg.exec():
+                res = confirm_dlg.get_result()
+                if res.get("add_item_to_cart") and res.get("product_barcode"):
+                    self.parent().add_product(res["product_barcode"])
+                self.parent().apply_voucher_payment(res["barcode"], res["name"], res["amount"], voucher_type=res["type"])
+                self.update_amounts()
+                self.check_completion()
+        else:
+            CustomMessageDialog("조회 실패", f"등록되지 않은 상품권 바코드입니다: {barcode}", 'warning', self).exec()
+
+
+class MobileVoucherPaymentDialog(QDialog):
+    """
+    모바일 상품권 / 교환권 결제 모달 다이얼로그 (물품교환권 & 금액권 하이브리드 지원)
+    """
+    def __init__(self, parent=None, remaining_due=0, product_manager=None, cart=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(styles.s(580), styles.s(560))
+        
+        self.remaining_due = remaining_due
+        self.product_manager = product_manager
+        self.cart = cart if cart is not None else []
+        self.selected_voucher = None
+        self.selected_barcode = None
+        self.result_data = None
+        
+        # Main Container
+        self.container = QFrame(self)
+        self.container.setGeometry(styles.s(10), styles.s(10), styles.s(560), styles.s(540))
+        self.container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {styles.WHITE};
+                border-radius: {styles.s(12)}px;
+                border: 2px solid {styles.PRIMARY_PURPLE};
+            }}
+        """)
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        shadow.setOffset(0, 5)
+        self.container.setGraphicsEffect(shadow)
+        
+        layout = QVBoxLayout(self.container)
+        layout.setContentsMargins(0, 0, 0, styles.s(15))
+        layout.setSpacing(styles.s(10))
+        
+        # Header
+        header = QFrame()
+        header.setFixedHeight(styles.s(50))
+        header.setStyleSheet(f"""
+            background-color: {styles.PRIMARY_PURPLE};
+            border-top-left-radius: {styles.s(10)}px;
+            border-top-right-radius: {styles.s(10)}px;
+        """)
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(styles.s(20), 0, styles.s(15), 0)
+        
+        lbl_title = QLabel("🎁 모바일 상품권 / 교환권 결제")
+        lbl_title.setStyleSheet("color: white; font-size: 13pt; font-weight: bold; font-family: 'Malgun Gothic';")
+        h_layout.addWidget(lbl_title)
+        
+        btn_close = QPushButton("✕")
+        btn_close.setFixedSize(styles.s(30), styles.s(30))
+        btn_close.setAutoDefault(False)
+        btn_close.setDefault(False)
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.setStyleSheet("""
+            QPushButton {
+                color: white;
+                background: transparent;
+                border: none;
+                font-size: 14pt;
+                font-weight: bold;
+            }
+            QPushButton:hover { color: #FFCDD2; }
+        """)
+        btn_close.clicked.connect(self.reject)
+        h_layout.addWidget(btn_close)
+        layout.addWidget(header)
+        
+        # Body
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(styles.s(25), styles.s(10), styles.s(25), styles.s(10))
+        body_layout.setSpacing(styles.s(12))
+        
+        lbl_guide = QLabel("상품권 바코드를 스캔하거나 번호를 입력하세요.")
+        lbl_guide.setStyleSheet("color: #374151; font-size: 11pt; font-weight: bold; font-family: 'Malgun Gothic';")
+        body_layout.addWidget(lbl_guide)
+        
+        input_row = QHBoxLayout()
+        input_row.setSpacing(styles.s(8))
+        
+        self.txt_barcode = QLineEdit()
+        self.txt_barcode.setPlaceholderText("상품권 바코드 (13자리 99...)")
+        self.txt_barcode.setFixedHeight(styles.s(42))
+        self.txt_barcode.setStyleSheet(f"""
+            QLineEdit {{
+                border: 2px solid #D1D5DB;
+                border-radius: 6px;
+                padding-left: 12px;
+                font-size: 12pt;
+                font-weight: bold;
+                font-family: 'Malgun Gothic';
+                color: #111827;
+            }}
+            QLineEdit:focus {{
+                border: 2px solid {styles.PRIMARY_PURPLE};
+                background-color: #FDF4FF;
+            }}
+        """)
+        self.txt_barcode.returnPressed.connect(self.handle_barcode_search)
+        input_row.addWidget(self.txt_barcode, stretch=4)
+        
+        btn_search = QPushButton("조회")
+        btn_search.setFixedHeight(styles.s(42))
+        btn_search.setFixedWidth(styles.s(80))
+        btn_search.setAutoDefault(False)
+        btn_search.setDefault(False)
+        btn_search.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_search.setStyleSheet("""
+            QPushButton {
+                background-color: #4F46E5;
+                color: white;
+                font-size: 11pt;
+                font-weight: bold;
+                border-radius: 6px;
+                border: none;
+            }
+            QPushButton:hover { background-color: #4338CA; }
+        """)
+        btn_search.clicked.connect(self.handle_barcode_search)
+        input_row.addWidget(btn_search, stretch=1)
+        body_layout.addLayout(input_row)
+        
+        # Quick Select ComboBox
+        self.combo_quick = QComboBox()
+        self.combo_quick.setFixedHeight(styles.s(36))
+        self.combo_quick.setStyleSheet("""
+            QComboBox {
+                border: 1px solid #D1D5DB;
+                border-radius: 6px;
+                padding-left: 10px;
+                background-color: #F9FAFB;
+                font-size: 10pt;
+                color: #4B5563;
+            }
+        """)
+        self.populate_quick_combobox()
+        self.combo_quick.currentIndexChanged.connect(self.handle_quick_select)
+        body_layout.addWidget(self.combo_quick)
+        
+        # Info Card
+        self.info_card = QFrame()
+        self.info_card.setStyleSheet("background-color: #F3F4F6; border: 1px solid #E5E7EB; border-radius: 8px;")
+        self.info_card_layout = QVBoxLayout(self.info_card)
+        self.info_card_layout.setContentsMargins(styles.s(15), styles.s(12), styles.s(15), styles.s(12))
+        self.info_card_layout.setSpacing(styles.s(8))
+        
+        self.lbl_card_title = QLabel("상품권을 조회하면 상세 정보가 여기에 표시됩니다.")
+        self.lbl_card_title.setStyleSheet("color: #6B7280; font-size: 11pt; font-family: 'Malgun Gothic';")
+        self.lbl_card_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.info_card_layout.addWidget(self.lbl_card_title)
+        
+        self.details_widget = QWidget()
+        self.details_layout = QVBoxLayout(self.details_widget)
+        self.details_layout.setContentsMargins(0, 0, 0, 0)
+        self.details_layout.setSpacing(styles.s(8))
+        
+        self.lbl_v_name = QLabel("")
+        self.lbl_v_name.setStyleSheet("font-size: 13pt; font-weight: bold; color: #111827;")
+        self.details_layout.addWidget(self.lbl_v_name)
+        
+        self.lbl_v_amounts = QLabel("")
+        self.lbl_v_amounts.setStyleSheet("font-size: 11pt; color: #374151;")
+        self.details_layout.addWidget(self.lbl_v_amounts)
+        
+        self.msg_box = QLabel("")
+        self.msg_box.setWordWrap(True)
+        self.msg_box.setStyleSheet("padding: 8px; border-radius: 6px; font-weight: bold; font-size: 10.5pt;")
+        self.details_layout.addWidget(self.msg_box)
+        
+        # Options for item vouchers when item is not in cart
+        self.item_opt_widget = QWidget()
+        item_opt_layout = QVBoxLayout(self.item_opt_widget)
+        item_opt_layout.setContentsMargins(0, 0, 0, 0)
+        item_opt_layout.setSpacing(4)
+        
+        self.radio_add_item = QRadioButton("장바구니에 해당 상품을 추가하고 교환")
+        self.radio_add_item.setChecked(True)
+        self.radio_diff_pay = QRadioButton("다른 상품 차액 결제로 진행 (금액 차감)")
+        self.radio_add_item.setStyleSheet("font-size: 10pt; font-weight: bold; color: #374151;")
+        self.radio_diff_pay.setStyleSheet("font-size: 10pt; font-weight: bold; color: #374151;")
+        
+        item_opt_layout.addWidget(self.radio_add_item)
+        item_opt_layout.addWidget(self.radio_diff_pay)
+        self.details_layout.addWidget(self.item_opt_widget)
+        self.item_opt_widget.hide()
+        
+        self.info_card_layout.addWidget(self.details_widget)
+        self.details_widget.hide()
+        
+        body_layout.addWidget(self.info_card)
+        layout.addWidget(body)
+        
+        # Action Buttons
+        btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(styles.s(25), 0, styles.s(25), 0)
+        btn_layout.setSpacing(styles.s(12))
+        
+        self.btn_apply = QPushButton("결제 적용")
+        self.btn_apply.setFixedHeight(styles.s(45))
+        self.btn_apply.setAutoDefault(False)
+        self.btn_apply.setDefault(False)
+        self.btn_apply.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_apply.setEnabled(False)
+        self.btn_apply.setStyleSheet("""
+            QPushButton {
+                background-color: #10B981;
+                color: white;
+                font-size: 12pt;
+                font-weight: bold;
+                border-radius: 6px;
+                border: none;
+            }
+            QPushButton:hover { background-color: #059669; }
+            QPushButton:disabled {
+                background-color: #E5E7EB;
+                color: #9CA3AF;
+                border: 1px solid #D1D5DB;
+            }
+        """)
+        self.btn_apply.clicked.connect(self.apply_payment)
+        
+        btn_cancel = QPushButton("취소")
+        btn_cancel.setFixedHeight(styles.s(45))
+        btn_cancel.setFixedWidth(styles.s(110))
+        btn_cancel.setAutoDefault(False)
+        btn_cancel.setDefault(False)
+        btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #F3F4F6;
+                color: #374151;
+                font-size: 11pt;
+                font-weight: bold;
+                border-radius: 6px;
+                border: 1px solid #D1D5DB;
+            }
+            QPushButton:hover { background-color: #E5E7EB; }
+        """)
+        btn_cancel.clicked.connect(self.reject)
+        
+        btn_layout.addWidget(btn_cancel)
+        btn_layout.addWidget(self.btn_apply)
+        layout.addLayout(btn_layout)
+        
+        QTimer.singleShot(100, self.txt_barcode.setFocus)
+
+    def populate_quick_combobox(self):
+        self.combo_quick.blockSignals(True)
+        self.combo_quick.clear()
+        self.combo_quick.addItem("--- [테스트용] 미사용 상품권 빠른 선택 ---", None)
+        if self.product_manager:
+            all_v = self.product_manager.get_all_vouchers()
+            for bc, v in all_v.items():
+                status = v.get("status", "unused")
+                bal = v.get("balance", v.get("price", 0))
+                if status != "used" and bal > 0:
+                    v_type_str = "물품교환" if v.get("voucher_type") == "item" else "금액권"
+                    self.combo_quick.addItem(f"[{v_type_str}] {v.get('name')} (잔액: {bal:,}원) - {bc}", bc)
+        self.combo_quick.blockSignals(False)
+
+    def handle_quick_select(self, index):
+        bc = self.combo_quick.currentData()
+        if bc:
+            self.txt_barcode.setText(bc)
+            self.lookup_barcode(bc)
+
+    def handle_barcode_search(self):
+        if getattr(self, '_is_searching', False):
+            return
+        self._is_searching = True
+        try:
+            bc = self.txt_barcode.text().strip()
+            if not bc:
+                return
+            self.lookup_barcode(bc)
+        finally:
+            QTimer.singleShot(600, lambda: setattr(self, '_is_searching', False))
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            event.accept()
+            self.handle_barcode_search()
+            return
+        elif event.key() == Qt.Key.Key_Escape:
+            self.reject()
+            return
+        super().keyPressEvent(event)
+
+    def lookup_barcode(self, barcode, auto_apply=False):
+        if not self.product_manager:
+            return
+            
+        real_bc = barcode
+        voucher = self.product_manager.get_voucher(real_bc)
+        if not voucher and len(real_bc) == 11:
+            prefixed = f"99{real_bc}"
+            v_cand = self.product_manager.get_voucher(prefixed)
+            if v_cand:
+                real_bc = prefixed
+                voucher = v_cand
+        elif not voucher and len(real_bc) == 12:
+            prefixed = f"9{real_bc}"
+            v_cand = self.product_manager.get_voucher(prefixed)
+            if v_cand:
+                real_bc = prefixed
+                voucher = v_cand
+                
+        if not voucher:
+            CustomMessageDialog("조회 실패", f"등록되지 않은 상품권 바코드입니다: {barcode}", 'warning', self).exec()
+            self.txt_barcode.clear()
+            self.txt_barcode.setFocus()
+            return
+            
+        status = voucher.get("status", "unused")
+        balance = voucher.get("balance", voucher.get("price", 0))
+        if status == "used" or balance <= 0:
+            CustomMessageDialog("사용 불가", f"이미 사용 완료된 상품권입니다. (잔액: 0원)\n바코드: {real_bc}", 'warning', self).exec()
+            self.txt_barcode.clear()
+            self.txt_barcode.setFocus()
+            return
+            
+        self.selected_voucher = voucher
+        self.selected_barcode = real_bc
+        self.display_voucher_info(voucher)
+        
+        confirm_dlg = VoucherConfirmDialog(
+            voucher_data=voucher,
+            barcode=real_bc,
+            remaining_due=self.remaining_due,
+            cart=self.cart,
+            product_manager=self.product_manager,
+            parent=self
+        )
+        if confirm_dlg.exec():
+            self.result_data = confirm_dlg.get_result()
+            self.accept()
+        else:
+            self.txt_barcode.clear()
+            self.txt_barcode.setFocus()
+
+    def display_voucher_info(self, voucher):
+        self.lbl_card_title.hide()
+        self.details_widget.show()
+        
+        v_type = voucher.get("voucher_type", "item" if voucher.get("product_barcode") else "amount")
+        name = voucher.get("name", "모바일 상품권")
+        price = voucher.get("price", 0)
+        balance = voucher.get("balance", price)
+        target_bc = voucher.get("product_barcode", "")
+        
+        type_badge = "🏷️ [물품 교환권]" if v_type == "item" else "💳 [금액형 상품권]"
+        self.lbl_v_name.setText(f"{type_badge} {name}")
+        self.lbl_v_amounts.setText(f"상품권 액면가: {price:,}원   |   현재 잔액: <b style='color:#1D4ED8;'>{balance:,}원</b>")
+        
+        can_instant_apply = False
+        if v_type == "amount":
+            self.item_opt_widget.hide()
+            apply_amt = min(self.remaining_due, balance)
+            bal_after = balance - apply_amt
+            self.msg_box.setStyleSheet("background-color: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE;")
+            self.msg_box.setText(
+                f"• 결제 대상 금액: {self.remaining_due:,}원\n"
+                f"• 차감 적용 금액: {apply_amt:,}원\n"
+                f"• 결제 후 남은 잔액: {bal_after:,}원"
+            )
+            self.btn_apply.setEnabled(True)
+            can_instant_apply = True
+        else:
+            in_cart_qty = sum(item["qty"] for item in self.cart if item.get("barcode") == target_bc)
+            target_prod = self.product_manager.get_product(target_bc)
+            target_name = target_prod["name"] if target_prod else name
+            
+            if in_cart_qty > 0 or len(self.cart) == 0:
+                self.item_opt_widget.hide()
+                self.msg_box.setStyleSheet("background-color: #ECFDF5; color: #065F46; border: 1px solid #A7F3D0;")
+                self.msg_box.setText(f"✓ 장바구니에 대상 상품 [{target_name}]이 확인되었습니다.\n교환 결제 금액: {price:,}원")
+                self.btn_apply.setEnabled(True)
+                can_instant_apply = True
+            else:
+                self.item_opt_widget.show()
+                self.msg_box.setStyleSheet("background-color: #FFFBEB; color: #92400E; border: 1px solid #FDE68A;")
+                self.msg_box.setText(f"ℹ 장바구니에 대상 상품 [{target_name}]이 없습니다.\n원하시는 결제 방식을 선택 후 [결제 적용]을 눌러주세요.")
+                self.btn_apply.setEnabled(True)
+                self.btn_apply.setFocus()
+                can_instant_apply = False
+        return can_instant_apply
+
+    def apply_payment(self):
+        if not self.selected_voucher or not self.selected_barcode:
+            return
+            
+        confirm_dlg = VoucherConfirmDialog(
+            voucher_data=self.selected_voucher,
+            barcode=self.selected_barcode,
+            remaining_due=self.remaining_due,
+            cart=self.cart,
+            product_manager=self.product_manager,
+            parent=self
+        )
+        if confirm_dlg.exec():
+            self.result_data = confirm_dlg.get_result()
+            self.accept()
+        else:
+            self.txt_barcode.clear()
+            self.txt_barcode.setFocus()
+
+    def get_result(self):
+        return self.result_data
+
+
+class VoucherConfirmDialog(QDialog):
+    """
+    모바일 상품권 / 교환권 결제 확인 전용 커스텀 팝업창
+    - 어떤 모바일 교환권인지, 금액권 잔액이 얼마나 남는지 상세 안내
+    - 확인 누르면 실제 결제 진행, 취소 누르면 취소
+    """
+    def __init__(self, voucher_data, barcode, remaining_due, cart=None, product_manager=None, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(styles.s(520), styles.s(490))
+        
+        self.voucher = voucher_data
+        self.barcode = barcode
+        self.remaining_due = remaining_due
+        self.cart = cart if cart is not None else []
+        self.product_manager = product_manager
+        
+        self.v_type = self.voucher.get("voucher_type", "item" if self.voucher.get("product_barcode") else "amount")
+        self.name = self.voucher.get("name", "모바일 상품권")
+        self.price = self.voucher.get("price", 0)
+        self.balance = self.voucher.get("balance", self.price)
+        self.target_bc = self.voucher.get("product_barcode", "")
+        
+        # 금액 계산
+        if self.v_type == "amount":
+            self.apply_amt = min(self.remaining_due, self.balance)
+            self.balance_after = max(0, self.balance - self.apply_amt)
+            self.add_item_to_cart = False
+        else:
+            in_cart_qty = sum(item["qty"] for item in self.cart if item.get("barcode") == self.target_bc)
+            self.apply_amt = self.price
+            self.balance_after = 0
+            self.add_item_to_cart = (in_cart_qty == 0)
+            
+        self.init_ui()
+
+    def init_ui(self):
+        # Container
+        container = QFrame(self)
+        container.setGeometry(styles.s(10), styles.s(10), styles.s(500), styles.s(470))
+        
+        theme_color = "#2563EB" if self.v_type == "amount" else "#7C3AED"
+        gradient_stop = "#1D4ED8" if self.v_type == "amount" else "#6D28D9"
+        
+        container.setStyleSheet(f"""
+            QFrame {{
+                background-color: white;
+                border-radius: {styles.s(12)}px;
+                border: 2px solid {theme_color};
+            }}
+        """)
+        
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(25)
+        shadow.setColor(QColor(0, 0, 0, 90))
+        shadow.setOffset(0, 6)
+        container.setGraphicsEffect(shadow)
+        
+        main_layout = QVBoxLayout(container)
+        main_layout.setContentsMargins(0, 0, 0, styles.s(16))
+        main_layout.setSpacing(styles.s(12))
+        
+        # 1. Header
+        header = QFrame()
+        header.setFixedHeight(styles.s(52))
+        header.setStyleSheet(f"""
+            QFrame {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 {theme_color}, stop:1 {gradient_stop});
+                border-top-left-radius: {styles.s(10)}px;
+                border-top-right-radius: {styles.s(10)}px;
+                border: none;
+            }}
+        """)
+        h_layout = QHBoxLayout(header)
+        h_layout.setContentsMargins(styles.s(20), 0, styles.s(15), 0)
+        
+        lbl_header = QLabel("🎁 모바일 상품권 결제 확인")
+        lbl_header.setStyleSheet("color: white; font-size: 13pt; font-weight: bold; font-family: 'Malgun Gothic'; border: none; background: transparent;")
+        h_layout.addWidget(lbl_header)
+        
+        btn_close = QPushButton("✕")
+        btn_close.setFixedSize(styles.s(30), styles.s(30))
+        btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_close.setStyleSheet("""
+            QPushButton {
+                color: white;
+                background: transparent;
+                border: none;
+                font-size: 14pt;
+                font-weight: bold;
+            }
+            QPushButton:hover { color: #FFCDD2; }
+        """)
+        btn_close.clicked.connect(self.reject)
+        h_layout.addWidget(btn_close)
+        main_layout.addWidget(header)
+        
+        # 2. Body
+        body = QWidget()
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(styles.s(22), styles.s(4), styles.s(22), styles.s(4))
+        body_layout.setSpacing(styles.s(12))
+        
+        # Voucher Info Header (Badge + Name)
+        voucher_info_box = QWidget()
+        v_info_layout = QVBoxLayout(voucher_info_box)
+        v_info_layout.setContentsMargins(0, 0, 0, 0)
+        v_info_layout.setSpacing(styles.s(4))
+        
+        badge_text = "💳  모바일 금액형 상품권" if self.v_type == "amount" else "🏷️  모바일 물품 교환권"
+        badge_bg = "#EFF6FF" if self.v_type == "amount" else "#F5F3FF"
+        badge_border = "#BFDBFE" if self.v_type == "amount" else "#DDD6FE"
+        badge_fg = "#1D4ED8" if self.v_type == "amount" else "#6D28D9"
+        
+        lbl_badge = QLabel(f" {badge_text} ")
+        lbl_badge.setFixedHeight(styles.s(24))
+        lbl_badge.setStyleSheet(f"""
+            background-color: {badge_bg};
+            color: {badge_fg};
+            border: 1px solid {badge_border};
+            border-radius: {styles.s(4)}px;
+            font-size: 9.5pt;
+            font-weight: bold;
+            padding: 2px 6px;
+        """)
+        
+        lbl_v_name = QLabel(self.name)
+        lbl_v_name.setStyleSheet("font-size: 15pt; font-weight: bold; color: #111827; font-family: 'Malgun Gothic';")
+        lbl_v_name.setWordWrap(True)
+        
+        lbl_bc = QLabel(f"바코드: {self.barcode}")
+        lbl_bc.setStyleSheet("font-size: 9.5pt; color: #6B7280; font-family: 'Consolas', monospace;")
+        
+        v_info_layout.addWidget(lbl_badge, alignment=Qt.AlignmentFlag.AlignLeft)
+        v_info_layout.addWidget(lbl_v_name)
+        v_info_layout.addWidget(lbl_bc)
+        body_layout.addWidget(voucher_info_box)
+        
+        # Detail Card
+        card = QFrame()
+        card.setStyleSheet("""
+            QFrame {
+                background-color: #F8FAFC;
+                border: 1.5px solid #E2E8F0;
+                border-radius: 8px;
+            }
+        """)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(styles.s(16), styles.s(14), styles.s(16), styles.s(14))
+        card_layout.setSpacing(styles.s(8))
+        
+        if self.v_type == "amount":
+            # Grid for Amount Voucher
+            grid = QGridLayout()
+            grid.setHorizontalSpacing(styles.s(12))
+            grid.setVerticalSpacing(styles.s(8))
+            
+            lbl_r1_title = QLabel("결제 대상 금액")
+            lbl_r1_title.setStyleSheet("font-size: 11pt; color: #64748B;")
+            lbl_r1_val = QLabel(f"{self.remaining_due:,} 원")
+            lbl_r1_val.setStyleSheet("font-size: 11.5pt; font-weight: bold; color: #334155;")
+            lbl_r1_val.setAlignment(Qt.AlignmentFlag.AlignRight)
+            
+            lbl_r2_title = QLabel("상품권 현재 잔액")
+            lbl_r2_title.setStyleSheet("font-size: 11pt; color: #64748B;")
+            lbl_r2_val = QLabel(f"{self.balance:,} 원")
+            lbl_r2_val.setStyleSheet("font-size: 11.5pt; font-weight: bold; color: #334155;")
+            lbl_r2_val.setAlignment(Qt.AlignmentFlag.AlignRight)
+            
+            lbl_r3_title = QLabel("이번 차감 금액")
+            lbl_r3_title.setStyleSheet("font-size: 11.5pt; font-weight: bold; color: #1E40AF;")
+            lbl_r3_val = QLabel(f"-{self.apply_amt:,} 원")
+            lbl_r3_val.setStyleSheet("font-size: 13pt; font-weight: bold; color: #2563EB;")
+            lbl_r3_val.setAlignment(Qt.AlignmentFlag.AlignRight)
+            
+            sep = QFrame()
+            sep.setFrameShape(QFrame.Shape.HLine)
+            sep.setStyleSheet("background-color: #CBD5E1; height: 1px;")
+            sep.setFixedHeight(1)
+            
+            lbl_r4_title = QLabel("결제 후 남은 잔액")
+            lbl_r4_title.setStyleSheet("font-size: 12pt; font-weight: bold; color: #0F172A;")
+            lbl_r4_val = QLabel(f"{self.balance_after:,} 원")
+            lbl_r4_val.setStyleSheet("font-size: 16pt; font-weight: bold; color: #059669; font-family: 'Malgun Gothic';")
+            lbl_r4_val.setAlignment(Qt.AlignmentFlag.AlignRight)
+            
+            grid.addWidget(lbl_r1_title, 0, 0)
+            grid.addWidget(lbl_r1_val, 0, 1)
+            grid.addWidget(lbl_r2_title, 1, 0)
+            grid.addWidget(lbl_r2_val, 1, 1)
+            grid.addWidget(lbl_r3_title, 2, 0)
+            grid.addWidget(lbl_r3_val, 2, 1)
+            grid.addWidget(sep, 3, 0, 1, 2)
+            grid.addWidget(lbl_r4_title, 4, 0)
+            grid.addWidget(lbl_r4_val, 4, 1)
+            card_layout.addLayout(grid)
+            
+            lbl_hint = QLabel("💡 사용 후 남은 잔액은 상품권에 자동 저장되며 다음 결제 시 재사용 가능합니다.")
+            lbl_hint.setStyleSheet("font-size: 9pt; color: #64748B; margin-top: 4px;")
+            lbl_hint.setWordWrap(True)
+            card_layout.addWidget(lbl_hint)
+            
+        else:
+            # Item Exchange Voucher
+            target_prod = self.product_manager.get_product(self.target_bc) if self.product_manager else None
+            target_name = target_prod["name"] if target_prod else self.name
+            target_price = target_prod["price"] if target_prod else self.price
+            in_cart_qty = sum(item["qty"] for item in self.cart if item.get("barcode") == self.target_bc)
+            
+            lbl_prod = QLabel(f"교환 대상 상품:  <b>{target_name}</b> ({target_price:,}원)")
+            lbl_prod.setStyleSheet("font-size: 11pt; color: #334155;")
+            card_layout.addWidget(lbl_prod)
+            
+            if in_cart_qty > 0 or len(self.cart) == 0:
+                lbl_desc = QLabel("✓ 장바구니의 해당 상품 1개가 무료 교환 결제 처리됩니다.")
+                lbl_desc.setStyleSheet("font-size: 10.5pt; color: #065F46; font-weight: bold; background-color: #ECFDF5; padding: 8px; border-radius: 6px;")
+                card_layout.addWidget(lbl_desc)
+                self.radio_add = None
+            else:
+                lbl_desc = QLabel("ℹ 장바구니에 해당 상품이 없습니다. 원하시는 결제 방식을 선택하세요:")
+                lbl_desc.setStyleSheet("font-size: 10pt; color: #92400E; font-weight: bold;")
+                card_layout.addWidget(lbl_desc)
+                
+                self.radio_add = QRadioButton("장바구니에 해당 상품을 추가하고 교환 결제")
+                self.radio_add.setChecked(True)
+                self.radio_add.setStyleSheet("font-size: 10pt; font-weight: bold; color: #334155;")
+                self.radio_diff = QRadioButton("다른 상품 차액 결제로 진행 (금액 차감)")
+                self.radio_diff.setStyleSheet("font-size: 10pt; font-weight: bold; color: #334155;")
+                card_layout.addWidget(self.radio_add)
+                card_layout.addWidget(self.radio_diff)
+                
+            sep = QFrame()
+            sep.setFrameShape(QFrame.Shape.HLine)
+            sep.setStyleSheet("background-color: #CBD5E1; height: 1px;")
+            sep.setFixedHeight(1)
+            card_layout.addWidget(sep)
+            
+            pay_row = QHBoxLayout()
+            lbl_pay_title = QLabel("교환 결제 금액")
+            lbl_pay_title.setStyleSheet("font-size: 12pt; font-weight: bold; color: #0F172A;")
+            lbl_pay_val = QLabel(f"{target_price:,} 원")
+            lbl_pay_val.setStyleSheet("font-size: 16pt; font-weight: bold; color: #7C3AED;")
+            lbl_pay_val.setAlignment(Qt.AlignmentFlag.AlignRight)
+            pay_row.addWidget(lbl_pay_title)
+            pay_row.addWidget(lbl_pay_val)
+            card_layout.addLayout(pay_row)
+            
+        body_layout.addWidget(card)
+        main_layout.addWidget(body)
+        
+        # 3. Bottom Button Row
+        btn_row = QHBoxLayout()
+        btn_row.setContentsMargins(styles.s(22), 0, styles.s(22), 0)
+        btn_row.setSpacing(styles.s(10))
+        
+        btn_cancel = QPushButton("✕ 취소 (Esc)")
+        btn_cancel.setFixedHeight(styles.s(46))
+        btn_cancel.setFixedWidth(styles.s(130))
+        btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_cancel.setStyleSheet("""
+            QPushButton {
+                background-color: #F1F5F9;
+                color: #475569;
+                font-size: 11pt;
+                font-weight: bold;
+                border-radius: 8px;
+                border: 1.5px solid #CBD5E1;
+            }
+            QPushButton:hover { background-color: #E2E8F0; }
+        """)
+        btn_cancel.clicked.connect(self.reject)
+        
+        self.btn_confirm = QPushButton("✓ 결제 승인 / 확인 (Enter)")
+        self.btn_confirm.setFixedHeight(styles.s(46))
+        self.btn_confirm.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_confirm.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {theme_color};
+                color: white;
+                font-size: 12.5pt;
+                font-weight: bold;
+                border-radius: 8px;
+                border: none;
+            }}
+            QPushButton:hover {{ background-color: {gradient_stop}; }}
+        """)
+        self.btn_confirm.clicked.connect(self.confirm_payment)
+        
+        btn_row.addWidget(btn_cancel)
+        btn_row.addWidget(self.btn_confirm)
+        main_layout.addLayout(btn_row)
+        
+        # 바코드 스캐너가 보낸 접미사(Enter/CR/LF)가 팝업창을 즉각 닫아버리지 않도록 500ms 쿨다운 적용
+        self.can_confirm = False
+        QTimer.singleShot(500, self._enable_confirm)
+
+    def _enable_confirm(self):
+        self.can_confirm = True
+        self.btn_confirm.setFocus()
+
+    def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            if not getattr(self, 'can_confirm', False):
+                event.ignore()
+                return
+            self.confirm_payment()
+        elif event.key() == Qt.Key.Key_Escape:
+            if not getattr(self, 'can_confirm', False):
+                event.ignore()
+                return
+            self.reject()
+        else:
+            super().keyPressEvent(event)
+
+    def confirm_payment(self):
+        if not getattr(self, 'can_confirm', False):
+            return
+        if self.v_type == "item" and hasattr(self, 'radio_add') and self.radio_add is not None:
+            self.add_item_to_cart = self.radio_add.isChecked()
+        self.accept()
+
+    def get_result(self):
+        return {
+            "barcode": self.barcode,
+            "name": self.name,
+            "type": self.v_type,
+            "amount": self.apply_amt,
+            "product_barcode": self.target_bc,
+            "add_item_to_cart": self.add_item_to_cart,
+            "balance_before": self.balance,
+            "balance_after": self.balance_after
+        }
 
 
 
